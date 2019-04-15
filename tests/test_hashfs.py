@@ -3,12 +3,9 @@
 from io import StringIO, BufferedReader
 import os
 import string
-
 import py
 import pytest
-
 import hashfs
-from hashfs._compat import to_bytes
 
 
 @pytest.fixture
@@ -76,7 +73,7 @@ def test_hashfs_put_stringio(fs, stringio):
     assert_file_put(fs, address)
 
     with open(address.abspath, 'rb') as fileobj:
-        assert fileobj.read() == to_bytes(stringio.getvalue())
+        assert fileobj.read() == bytes(stringio.getvalue(), 'UTF8')
 
 
 def test_hashfs_put_fileobj(fs, fileio):
@@ -94,7 +91,7 @@ def test_hashfs_put_file(fs, filepath):
     assert_file_put(fs, address)
 
     with open(address.abspath, 'rb') as fileobj:
-        assert fileobj.read() == to_bytes(filepath.read())
+        assert fileobj.read() == bytes(filepath.read(), 'UTF8')
 
 
 def test_hashfs_put_duplicate(fs, stringio):
@@ -129,7 +126,7 @@ def test_hashfs_open(fs, stringio, address_attr):
     fileobj = fs.open(getattr(address, address_attr))
 
     assert isinstance(fileobj, BufferedReader)
-    assert fileobj.read() == to_bytes(stringio.getvalue())
+    assert fileobj.read() == bytes(stringio.getvalue(), 'UTF8')
 
     fileobj.close()
 

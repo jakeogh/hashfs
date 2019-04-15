@@ -1,7 +1,7 @@
 Installation
 ============
 
-hashfs requires Python >= 2.7 or >= 3.3.
+hashfs requires Python >= 3.4.
 
 To install from `PyPI <https://pypi.python.org/pypi/hashfs>`_:
 

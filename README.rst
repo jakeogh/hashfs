@@ -22,7 +22,7 @@ Features
 - Can save files from local file paths or readable objects (open file handlers, IO buffers, etc).
 - Able to repair the root folder by reindexing all files. Useful if the hashing algorithm or folder structure options change or to initialize existing files.
 - Supports any hashing algorithm available via ``hashlib.new``.
-- Python 2.7+/3.3+ compatible.
+- Python 3.4+ compatible.
 
 
 Links

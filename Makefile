@@ -83,7 +83,7 @@ docs:
 
 .PHONY: serve-docs
 serve-docs:
-	cd docs/_build/html; python2 -m SimpleHTTPServer 8000
+	cd docs/_build/html; python -m SimpleHTTPServer 8000
 
 .PHONY: reload-docs
 reload-docs: docs serve-docs

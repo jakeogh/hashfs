@@ -10,7 +10,6 @@ import shutil
 from tempfile import NamedTemporaryFile
 
 from .utils import issubdir, shard
-from ._compat import to_bytes, walk, FileExistsError
 
 
 class HashFS(object):
@@ -90,7 +89,7 @@ class HashFS(object):
         """Create a named temporary file from a :class:`Stream` object and
         return its filename.
         """
-        tmp = NamedTemporaryFile(delete=False)
+        tmp = NamedTemporaryFile(delete=False, dir=self.root)
 
         if self.fmode is not None:
             oldmask = os.umask(0)
@@ -101,7 +100,9 @@ class HashFS(object):
                 os.umask(oldmask)
 
         for data in stream:
-            tmp.write(to_bytes(data))
+            if isinstance(data, str):
+                data = bytes(data, 'UTF8')
+            tmp.write(data)
 
         tmp.close()
 
@@ -153,6 +154,7 @@ class HashFS(object):
             FileNotFoundError: If file doesn't exist.
         """
         realpath = self.idpath(id)
+        assert realpath.startswith(self.root)
         os.remove(realpath)
         self.remove_empty(os.path.dirname(realpath))
 
@@ -176,7 +178,7 @@ class HashFS(object):
         """Return generator that yields all files in the :attr:`root`
         directory.
         """
-        for folder, subfolders, files in walk(self.root):
+        for folder, subfolders, files in os.walk(self.root):
             for file in files:
                 yield os.path.abspath(os.path.join(folder, file))
 
@@ -184,7 +186,7 @@ class HashFS(object):
         """Return generator that yields all folders in the :attr:`root`
         directory that contain files.
         """
-        for folder, subfolders, files in walk(self.root):
+        for folder, subfolders, files in os.walk(self.root):
             if files:
                 yield folder
 
@@ -256,7 +258,10 @@ class HashFS(object):
         """Compute hash of file using :attr:`algorithm`."""
         hashobj = hashlib.new(self.algorithm)
         for data in stream:
-            hashobj.update(to_bytes(data))
+            # hashobj.update(to_bytes(data))
+            if isinstance(data, str):
+                data = bytes(data, 'UTF8')
+            hashobj.update(data)
         return hashobj.hexdigest()
 
     def shard(self, id):
