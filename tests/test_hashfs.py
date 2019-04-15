@@ -228,35 +228,6 @@ def test_hashfs_unshard_error(fs):
         fs.unshard('invalid')
 
 
-def test_hashfs_repair(fs, stringio):
-    original_address = fs.put(stringio)
-    newfs = hashfs.HashFS(fs.root, depth=1)
-
-    repaired = newfs.repair()
-
-    assert len(repaired) == 1
-    original_path, address = repaired[0]
-
-    assert original_path == original_address.abspath
-    assert not os.path.isfile(original_path)
-    assert_file_put(newfs, address)
-
-
-def test_hashfs_repair_duplicates(fs, stringio):
-    original_address = fs.put(stringio)
-    newfs = hashfs.HashFS(fs.root, depth=1)
-    newfs.put(stringio)
-
-    repaired = newfs.repair()
-
-    assert len(repaired) == 1
-    original_path, address = repaired[0]
-
-    assert original_path == original_address.abspath
-    assert not os.path.isfile(original_path)
-    assert_file_put(newfs, address)
-
-
 def test_hashfs_idpath(fs):
     assert fs.idpath('0' * fs.digestlen) == fs.root + os.path.sep + \
         os.path.sep.join(list('0' * fs.depth)) + os.path.sep + \

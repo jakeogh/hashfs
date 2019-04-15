@@ -277,31 +277,6 @@ class HashFS(object):
 
         return path.split(os.sep)[-1]
 
-    def repair(self):
-        """Repair any file locations whose content address doesn't match it's
-        file path.
-        """
-        repaired = []
-        corrupted = tuple(self.corrupted())
-        oldmask = os.umask(0)
-
-        try:
-            for path, address in corrupted:
-                if os.path.isfile(address.abspath):
-                    # File already exists so just delete corrupted path.
-                    os.remove(path)
-                else:
-                    # File doesn't exists so move it.
-                    self.makepath(os.path.dirname(address.abspath))
-                    shutil.move(path, address.abspath)
-
-                os.chmod(address.abspath, self.fmode)
-                repaired.append((path, address))
-        finally:
-            os.umask(oldmask)
-
-        return repaired
-
     def corrupted(self):
         """Return generator that yields corrupted files as ``(path, address)``
         where ``path`` is the path of the corrupted file and ``address`` is

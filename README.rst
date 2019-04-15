@@ -20,7 +20,7 @@ Features
 - Files are stored once and never duplicated.
 - Uses an efficient folder structure optimized for a large number of files. File paths are based on the content hash and are nested based on the first ``n`` number of characters.
 - Can save files from local file paths or readable objects (open file handlers, IO buffers, etc).
-- Able to repair the root folder by reindexing all files. Useful if the hashing algorithm or folder structure options change or to initialize existing files.
+- Able to index all files and find corrupted hashes.
 - Supports any hashing algorithm available via ``hashlib.new``.
 - Python 3.4+ compatible.
 
@@ -75,7 +75,7 @@ Designate a root folder for ``HashFS``. If the folder doesn't already exist, it 
 Basic Usage
 ===========
 
-``HashFS`` supports basic file storage, retrieval, and removal as well as some more advanced features like file repair.
+``HashFS`` supports file storage, retrieval, and removal.
 
 
 Storing Content
@@ -144,24 +144,10 @@ Advanced Usage
 Below are some of the more advanced features of ``HashFS``.
 
 
-Repairing Files
----------------
-
-The ``HashFS`` files may not always be in sync with it's ``depth``, ``width``, or ``algorithm`` settings (e.g. if ``HashFS`` takes ownership of a directory that wasn't previously stored using content hashes or if the ``HashFS`` settings change). These files can be easily reindexed using ``repair()``.
-
-
-.. code-block:: python
-
-    repaired = fs.repair()
-
-
-**WARNING:** It's recommended that a backup of the directory be made before repairing just in case something goes wrong.
-
-
 Walking Corrupted Files
 -----------------------
 
-Instead of actually repairing the files, you can iterate over them for custom processing.
+Iterate over files that do not hash to their name.
 
 
 .. code-block:: python
