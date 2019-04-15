@@ -192,9 +192,9 @@ def test_hashfs_remove_empty(fs):
     subpath2 = os.path.join(fs.root, '1', '4', '5')
     subpath3 = os.path.join(fs.root, '6', '7', '8')
 
-    fs.makepath(subpath1)
-    fs.makepath(subpath2)
-    fs.makepath(subpath3)
+    os.makedirs(subpath1)
+    os.makedirs(subpath2)
+    os.makedirs(subpath3)
 
     assert os.path.exists(subpath1)
     assert os.path.exists(subpath2)
@@ -228,18 +228,18 @@ def test_hashfs_unshard_error(fs):
         fs.unshard('invalid')
 
 
-def test_hashfs_idpath(fs):
-    assert fs.idpath('0' * fs.digestlen) == fs.root + os.path.sep + \
+def test_hashfs_digestpath(fs):
+    assert fs.digestpath('0' * fs.digestlen) == fs.root + os.path.sep + \
         os.path.sep.join(list('0' * fs.depth)) + os.path.sep + \
         ('0' * fs.digestlen)
     with pytest.raises(ValueError):
-        fs.idpath('invalid')
+        fs.digestpath('invalid')
     with pytest.raises(ValueError):
-        fs.idpath('0' * (fs.digestlen + 1))
+        fs.digestpath('0' * (fs.digestlen + 1))
     with pytest.raises(ValueError):
-        fs.idpath('0' * (fs.digestlen - 1))
+        fs.digestpath('0' * (fs.digestlen - 1))
     with pytest.raises(ValueError):
-        fs.idpath(('0' * (fs.digestlen - 1)) + 'z')
+        fs.digestpath(('0' * (fs.digestlen - 1)) + 'z')
 
 
 def test_hashfs_files(fs):

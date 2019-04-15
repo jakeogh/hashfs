@@ -70,17 +70,17 @@ class HashFS(object):
         stream = Stream(file)
 
         with closing(stream):
-            id = self.computehash(stream)
-            filepath, is_duplicate = self._copy(stream, id)
+            digest = self.computehash(stream)
+            filepath, is_duplicate = self._copy(stream, digest)
 
-        return HashAddress(id, self, filepath, is_duplicate)
+        return HashAddress(digest, self, filepath, is_duplicate)
 
-    def _copy(self, stream, id):
+    def _copy(self, stream, digest):
         """Copy the contents of `stream` onto disk. The copy process uses a
         temporary file to store the initial contents and then moves that file
         to it's final location.
         """
-        filepath = self.idpath(id)
+        filepath = self.digestpath(digest)
 
         if not os.path.isfile(filepath):
             # Only move file if it doesn't already exist.
@@ -89,7 +89,7 @@ class HashFS(object):
             try:
                 shutil.move(fname, filepath)
             except FileNotFoundError:
-                self.makepath(os.path.dirname(filepath))
+                os.makedirs(os.path.dirname(filepath), self.dmode)
                 shutil.move(fname, filepath)
         else:
             is_duplicate = True
@@ -119,12 +119,12 @@ class HashFS(object):
 
         return tmp.name
 
-    def get(self, id):
+    def get(self, digest):
         """Return :class:`HashAdress` from given id. If `id` does not
         refer to a valid file, then ``None`` is returned.
 
         Args:
-            id (str): Address ID.
+            digest (str): Address ID.
 
         Returns:
             HashAddress: File's hash address.
@@ -132,17 +132,17 @@ class HashFS(object):
         Raises:
             FileNotFoundError: If file doesn't exist.
         """
-        realpath = self.idpath(id)
+        realpath = self.digestpath(digest)
         if os.path.isfile(realpath):
-            return HashAddress(id, self, realpath)  # todo
+            return HashAddress(digest, self, realpath)  # todo
         else:
             raise FileNotFoundError
 
-    def open(self, id, mode='rb'):
+    def open(self, digest, mode='rb'):
         """Return open buffer object from given id.
 
         Args:
-            id (str): Address ID.
+            digest (str): Address ID.
             mode (str, optional): Mode to open file in. Defaults to ``'rb'``.
 
         Returns:
@@ -151,19 +151,19 @@ class HashFS(object):
         Raises:
             FileNotFoundError: If file doesn't exist.
         """
-        realpath = self.idpath(id)
+        realpath = self.digestpath(digest)
         return io.open(realpath, mode)
 
-    def delete(self, id):
+    def delete(self, digest):
         """Delete file using id. Remove any empty directories after deleting.
 
         Args:
-            id (str): Address ID.
+            digest (str): Address ID.
 
         Raises:
             FileNotFoundError: If file doesn't exist.
         """
-        realpath = self.idpath(id)
+        realpath = self.digestpath(digest)
         assert realpath.startswith(self.root)
         os.remove(realpath)
         self.remove_empty(os.path.dirname(realpath))
@@ -218,9 +218,9 @@ class HashFS(object):
 
         return total
 
-    def exists(self, id):
-        """Check whether a given file id exists on disk."""
-        return os.path.isfile(self.idpath(id))
+    def exists(self, digest):
+        """Check whether a given file digest exists on disk."""
+        return os.path.isfile(self.digestpath(digest))
 
     def haspath(self, path):
         """Return whether `path` is a subdirectory of the :attr:`root`
@@ -228,19 +228,15 @@ class HashFS(object):
         """
         return issubdir(path, self.root)
 
-    def makepath(self, path):
-        """Physically create the folder path on disk."""
-        os.makedirs(path, self.dmode)
-
     def relpath(self, path):
         """Return `path` relative to the :attr:`root` directory."""
         return os.path.relpath(path, self.root)
 
-    def idpath(self, id):
+    def digestpath(self, digest):
         """Build the file path for a given hash id.
 
         Args:
-            id (str): Address ID.
+            digest (str): Address ID.
 
         Returns:
             path: An absolute file path.
@@ -248,15 +244,15 @@ class HashFS(object):
         Raises:
             ValueError: If the ID is the wrong length or not hex.
         """
-        if len(id) != self.digestlen:
+        if len(digest) != self.digestlen:
             raise ValueError('Invalid ID: "{0}" is not {1} digits '
-                             'long'.format(id, self.digestlen))
+                             'long'.format(digest, self.digestlen))
         try:
-            int(id, 16)
+            int(digest, 16)
         except ValueError:
             raise ValueError('Invalid ID: "{0}" '
-                             'is not hex'.format(id))
-        paths = self.shard(id)
+                             'is not hex'.format(digest))
+        paths = self.shard(digest)
         return os.path.join(self.root, *paths)
 
     def computehash(self, stream):
@@ -269,11 +265,11 @@ class HashFS(object):
             hashobj.update(data)
         return hashobj.hexdigest()
 
-    def shard(self, id):
+    def shard(self, digest):
         """Creates a list of `depth` number of tokens with width
-        `width` from the first part of the id plus the remainder."""
-        return compact([id[i * self.width:self.width * (i + 1)]
-                        for i in range(self.depth)] + [id])
+        `width` from the first part of the digest plus the remainder."""
+        return compact([digest[i * self.width:self.width * (i + 1)]
+                        for i in range(self.depth)] + [digest])
 
     def unshard(self, path):
         """Unshard path to determine hash value."""
@@ -293,18 +289,18 @@ class HashFS(object):
             stream = Stream(path)
 
             with closing(stream):
-                id = self.computehash(stream)
+                digest = self.computehash(stream)
 
-            expected_path = self.idpath(id)
+            expected_path = self.digestpath(digest)
 
             if expected_path != path:
-                yield (path, HashAddress(id, self, expected_path))
+                yield (path, HashAddress(digest, self, expected_path))
 
-    def __contains__(self, id):
-        """Return whether a given file id is contained in the :attr:`root`
+    def __contains__(self, digest):
+        """Return whether a given file digest is contained in the :attr:`root`
         directory.
         """
-        return self.exists(id)
+        return self.exists(digest)
 
     def __iter__(self):
         """Iterate over all files in the :attr:`root` directory."""
@@ -321,21 +317,21 @@ class HashAddress(namedtuple('HashAddress',
     """File address containing file's path on disk and it's content hash ID.
 
     Attributes:
-        id (str): Hash ID (hexdigest) of file contents.
+        digest (str): Hash ID (hexdigest) of file contents.
         fs (obj): ``HashFs`` object.
         abspath (str): Absoluate path location of file on disk.
         is_duplicate (boolean, optional): Whether the hash address created was
             a duplicate of a previously existing file. Can only be ``True``
             after a put operation. Defaults to ``False``.
     """
-    def __new__(cls, id, fs, abspath, is_duplicate=False):
+    def __new__(cls, digest, fs, abspath, is_duplicate=False):
         return super(HashAddress, cls).__new__(cls,
-                                               id,
+                                               digest,
                                                fs,
                                                abspath,
                                                is_duplicate)
 
-    def __init__(self, id, fs, abspath, is_duplicate=False):
+    def __init__(self, digest, fs, abspath, is_duplicate=False):
         self.relpath = fs.relpath(self.abspath)
 
 
