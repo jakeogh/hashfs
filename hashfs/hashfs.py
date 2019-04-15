@@ -7,7 +7,6 @@ import io
 import os
 import shutil
 from tempfile import NamedTemporaryFile
-from contextlib import closing
 import attr
 
 
@@ -24,6 +23,34 @@ def unshard(path):
         raise ValueError('Path must be absolute.')
 
     return path.split(os.path.sep)[-1]
+
+
+def hash_file(path, algorithm, tmp=None):
+    block_size = 256 * 128 * 2
+    hasher = hashlib.new(algorithm)
+    with open(path, 'rb') as handle:
+        for chunk in iter(lambda: handle.read(block_size), b''):
+            hasher.update(chunk)
+            if tmp:
+                tmp.write(chunk)
+        if tmp:
+            tmp.close()
+    return hasher.hexdigest()
+
+
+def hash_file_handle(handle, algorithm, tmp=None):
+    block_size = 256 * 128 * 2
+    hasher = hashlib.new(algorithm)
+    pos = handle.tell()
+    for chunk in iter(lambda: handle.read(block_size), b''):
+        hasher.update(chunk)
+        if tmp:
+            tmp.write(chunk)
+    if tmp:
+        tmp.close()
+
+    handle.seek(pos)
+    return hasher.hexdigest()
 
 
 @attr.s(auto_attribs=True)
@@ -59,48 +86,11 @@ class HashFS():
         assert self.depth > 0
         assert self.width > 0
 
-    def put(self, file):
-        """Store contents of `file` on disk using its content hash for the
-        address.
-
-        Args:
-            file (mixed): Readable object or path to file.
-
-        Returns:
-            HashAddress: File's hash address.
-        """
-        stream = Stream(file)
-
-        with closing(stream):
-            digest = self.computehash(stream)
-            filepath, is_duplicate = self._copy(stream, digest)
-
-        return HashAddress(digest, self, filepath, is_duplicate)
-
-    def _copy(self, stream, digest):
-        """Copy the contents of `stream` onto disk. The copy process uses a
-        temporary file to store the initial contents and then moves that file
-        to it's final location.
-        """
-        filepath = self.digestpath(digest)
-
-        if not os.path.isfile(filepath):
-            # Only move file if it doesn't already exist.
-            is_duplicate = False
-            fname = self._mktempfile(stream)
-            try:
-                shutil.move(fname, filepath)
-            except FileNotFoundError:
-                os.makedirs(os.path.dirname(filepath), self.dmode)
-                shutil.move(fname, filepath)
-        else:
-            is_duplicate = True
-
-        return (filepath, is_duplicate)
-
-    def _mktempfile(self, stream):
-        """Create a named temporary file from a :class:`Stream` object and
-        return its filename.
+    def _mktemp(self):
+        """Create a named temporary file and return its filename. The
+        temporary file is geneated in the hasfs root to make move()'s by
+        rename instead of copy/delete.
+        TODO FIX: A second HashFS instance might return a tempfile in .files()
         """
         try:
             tmp = NamedTemporaryFile(delete=False, dir=self.root)
@@ -115,15 +105,82 @@ class HashFS():
                 os.chmod(tmp.name, self.fmode)
             finally:
                 os.umask(oldmask)
+        return tmp
 
-        for data in stream:
-            if isinstance(data, str):
-                data = bytes(data, 'UTF8')
-            tmp.write(data)
+    def _mvtemp(self, tmp, filepath):
+        if not os.path.isfile(filepath):
+            # Only move file if it doesn't already exist.
+            is_duplicate = False
+            assert os.path.getsize(tmp.name) > 0
+            try:
+                shutil.move(tmp.name, filepath)
+            except FileNotFoundError:
+                os.makedirs(os.path.dirname(filepath), self.dmode)
+                shutil.move(tmp.name, filepath)
+        else:
+            is_duplicate = True
+            tmp_size = os.path.getsize(tmp.name)
+            existing_size = os.path.getsize(filepath)
+            assert tmp_size == existing_size
 
-        tmp.close()
+        return is_duplicate
 
-        return tmp.name
+    def putstr(self, string):
+        """Store contents of `string` on disk using its content hash for the
+        address.
+
+        Args:
+            string (str): Python 3 str.
+
+        Returns:
+            HashAddress: File's hash address.
+        """
+        string = io.StringIO(string)
+        tmp = self._mktemp()
+        digest = self.computehash(string, tmp)
+        filepath = self.digestpath(digest)
+        is_duplicate = self._mvtemp(tmp, filepath)
+
+        return HashAddress(digest, self, filepath, is_duplicate)
+
+    def putrequest(self, request):
+        """Store contents of `requests.model.Request` on disk using its
+        content hash for the address.
+
+        Args:
+            stream (requests.model.Request): Readable object or path to file.
+
+        Returns:
+            HashAddress: File's hash address.
+        """
+
+        tmp = self._mktemp()
+        digest = self.computehash(request, tmp)
+        filepath = self.digestpath(digest)
+        is_duplicate = self._mvtemp(tmp, filepath)
+
+        return HashAddress(digest, self, filepath, is_duplicate)
+
+    def putfile(self, file):
+        """Store contents of `file` on disk using its content hash for the
+        address.
+
+        Args:
+            file (mixed): Readable object or path to file.
+
+        Returns:
+            HashAddress: File's hash address.
+        """
+        tmp = self._mktemp()
+        try:
+            digest = hash_file(file, self.algorithm, tmp)
+        except TypeError:
+            digest = hash_file_handle(file, self.algorithm, tmp)
+
+        filepath = self.digestpath(digest)
+        is_duplicate = self._mvtemp(tmp, filepath)
+
+        return HashAddress(digest, self, filepath, is_duplicate)
 
     def get(self, digest):
         """Return :class:`HashAdress` from given id. If `id` does not
@@ -229,13 +286,17 @@ class HashFS():
         paths = self.shard(digest)
         return os.path.join(self.root, *paths)
 
-    def computehash(self, stream):
+    def computehash(self, stream, tmp):
         """Compute hash of file using :attr:`algorithm`."""
         hashobj = hashlib.new(self.algorithm)
-        for data in stream:
-            if isinstance(data, str):
-                data = bytes(data, 'UTF8')
-            hashobj.update(data)
+        for chunk in stream:
+            if isinstance(chunk, str):
+                chunk = bytes(chunk, 'UTF8')
+            hashobj.update(chunk)
+            if tmp:
+                tmp.write(chunk)
+        if tmp:
+            tmp.close()
         return hashobj.hexdigest()
 
     def shard(self, digest):
@@ -250,11 +311,8 @@ class HashFS():
         the :class:`HashAddress` of the expected location.
         """
         for path in self.files():
-            stream = Stream(path)
-
-            with closing(stream):
-                digest = self.computehash(stream)
-
+            digest = hash_file(path, self.algorithm)
+            assert len(digest) == len(path.split(os.path.sep)[-1])
             expected_path = self.digestpath(digest)
             if expected_path != path:
                 yield (path, HashAddress(digest, self, expected_path))
@@ -291,53 +349,3 @@ class HashAddress():
     fs: HashFS
     abspath: str
     is_duplicate: bool = False
-
-
-class Stream():
-    """Common interface for file-like objects.
-
-    The input `obj` can be a file-like object or a path to a file. If `obj` is
-    a path to a file, then it will be opened until :meth:`close` is called.
-    If `obj` is a file-like object, then it's original position will be
-    restored when :meth:`close` is called instead of closing the object
-    automatically. Closing of the stream is deferred to whatever process passed
-    the stream in.
-
-    Successive readings of the stream is supported without having to manually
-    set it's position back to ``0``.
-    """
-    def __init__(self, obj):
-        if hasattr(obj, 'read'):
-            pos = obj.tell()
-        elif os.path.isfile(obj):
-            obj = io.open(obj, 'rb')
-            pos = None
-        else:
-            raise ValueError(('Object must be a valid file path or '
-                              'a readable object.'))
-        self._obj = obj
-        self._pos = pos
-
-    def __iter__(self):
-        """Read underlying IO object and yield results. Return object to
-        original position if we didn't open it originally.
-        """
-        self._obj.seek(0)
-
-        while True:
-            data = self._obj.read()
-            if not data:
-                break
-            yield data
-
-        if self._pos is not None:
-            self._obj.seek(self._pos)
-
-    def close(self):
-        """Close underlying IO object if we opened it, else return it to
-        original position.
-        """
-        if self._pos is None:
-            self._obj.close()
-        else:
-            self._obj.seek(self._pos)

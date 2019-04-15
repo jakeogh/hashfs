@@ -28,7 +28,7 @@ def cli(ctx, root, depth, width, algorithm, fmode, dmode, verbose):
 @click.pass_obj
 def put(obj, infiles):
     for infile in infiles:
-        item = obj.put(infile)
+        item = obj.putfile(infile)
         print("put:", infile.name, item.digest)
 
 
@@ -58,6 +58,13 @@ def delete(obj, digests):
 def iterate(obj):
     for hashfile in obj.files():
         print("file:", hashfile)
+
+
+@cli.command()
+@click.pass_obj
+def check(obj):
+    for hashfile in obj.corrupted():
+        print("corrupt file:", hashfile)
 
 
 if __name__ == '__main__':
