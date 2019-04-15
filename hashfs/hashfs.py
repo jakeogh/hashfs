@@ -9,7 +9,18 @@ import os
 import shutil
 from tempfile import NamedTemporaryFile
 
-from .utils import issubdir, shard
+
+def compact(items):
+    """Return only truthy elements of `items`."""
+    return [item for item in items if item]
+
+
+def issubdir(subpath, path):
+    """Return whether `subpath` is a sub-directory of `path`."""
+    # Append os.sep so that paths like /usr/var2/log doesn't match /usr/var.
+    path = os.path.realpath(path) + os.sep
+    subpath = os.path.realpath(subpath)
+    return subpath.startswith(path)
 
 
 class HashFS(object):
@@ -122,7 +133,6 @@ class HashFS(object):
             FileNotFoundError: If file doesn't exist.
         """
         realpath = self.idpath(id)
-
         if os.path.isfile(realpath):
             return HashAddress(id, self, realpath)  # todo
         else:
@@ -203,7 +213,6 @@ class HashFS(object):
         directory.
         """
         total = 0
-
         for path in self.files():
             total += os.path.getsize(path)
 
@@ -221,11 +230,7 @@ class HashFS(object):
 
     def makepath(self, path):
         """Physically create the folder path on disk."""
-        try:
-            os.makedirs(path, self.dmode)
-        except FileExistsError:
-            assert os.path.isdir(path),\
-                'expected {} to be a directory'.format(path)
+        os.makedirs(path, self.dmode)
 
     def relpath(self, path):
         """Return `path` relative to the :attr:`root` directory."""
@@ -265,8 +270,10 @@ class HashFS(object):
         return hashobj.hexdigest()
 
     def shard(self, id):
-        """Shard content ID into subfolders."""
-        return shard(id, self.depth, self.width)
+        """Creates a list of `depth` number of tokens with width
+        `width` from the first part of the id plus the remainder."""
+        return compact([id[i * self.width:self.width * (i + 1)]
+                        for i in range(self.depth)] + [id])
 
     def unshard(self, path):
         """Unshard path to determine hash value."""

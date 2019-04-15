@@ -271,6 +271,13 @@ def test_hashfs_iter(fs):
     assert test_count == count
 
 
+def test_hashfs_corrupted(fs, stringio):
+    address = fs.put(stringio)
+    with open(address.abspath, 'ab') as fh:
+        fh.write(b'f')
+    assert len(list(fs.corrupted())) == 1
+
+
 def test_hashfs_count(fs):
     count = 5
     put_range(fs, count)
