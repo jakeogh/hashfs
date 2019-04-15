@@ -55,6 +55,11 @@ setup(
     tests_require=meta['__tests_require__'],
     cmdclass={'test': Tox},
     test_suite='tests',
+    entry_points={
+        'console_scripts': [
+            'hashfs = hashfs.cli.cli:cli',
+        ],
+    },
     keywords='hashfs hash file system content addressable fixed storage',
     classifiers=[
         'Development Status :: 3 - Alpha',

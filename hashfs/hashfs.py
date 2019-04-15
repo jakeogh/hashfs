@@ -1,15 +1,14 @@
 """Module for HashFS class.
 """
 
-from collections import namedtuple
-from contextlib import closing
+import pathlib
 import hashlib
 import io
 import os
 import shutil
-import attr
-import pathlib
 from tempfile import NamedTemporaryFile
+from contextlib import closing
+import attr
 
 
 def compact(items):
@@ -48,7 +47,7 @@ class HashFS():
             read/write and everyone else to read and everyone to execute.
     """
     root: str = attr.ib(converter=pathlib.Path)
-    depth: int = 4
+    depth: int = 3
     width: int = 1
     algorithm: str = 'sha256'
     fmode: int = 0o664
@@ -57,6 +56,8 @@ class HashFS():
     def __attrs_post_init__(self):
         self.root = self.root.resolve()
         self.digestlen = hashlib.new(self.algorithm).digest_size * 2
+        assert self.depth > 0
+        assert self.width > 0
 
     def put(self, file):
         """Store contents of `file` on disk using its content hash for the
@@ -101,7 +102,11 @@ class HashFS():
         """Create a named temporary file from a :class:`Stream` object and
         return its filename.
         """
-        tmp = NamedTemporaryFile(delete=False, dir=self.root)
+        try:
+            tmp = NamedTemporaryFile(delete=False, dir=self.root)
+        except FileNotFoundError:
+            os.makedirs(self.root)
+            tmp = NamedTemporaryFile(delete=False, dir=self.root)
 
         if self.fmode is not None:
             oldmask = os.umask(0)
@@ -160,12 +165,16 @@ class HashFS():
         Args:
             digest (str): Address ID.
 
+        Returns:
+           True (bool): If file was removed.
+
         Raises:
             FileNotFoundError: If file doesn't exist.
         """
         realpath = self.digestpath(digest)
         assert realpath.startswith(str(self.root))
         os.remove(realpath)
+        return True
 
     def files(self):
         """Return generator that yields all files in the :attr:`root`
@@ -174,14 +183,6 @@ class HashFS():
         for folder, _, files in os.walk(self.root):
             for file in files:
                 yield os.path.abspath(os.path.join(folder, file))
-
-    def folders(self):
-        """Return generator that yields all folders in the :attr:`root`
-        directory that contain files.
-        """
-        for folder, _, files in os.walk(self.root):
-            if files:
-                yield folder
 
     def count(self):
         """Return count of the number of files in the :attr:`root` directory.

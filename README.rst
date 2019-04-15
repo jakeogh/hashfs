@@ -172,15 +172,6 @@ Iterate over files.
         # do something
 
 
-Iterate over folders that contain files (i.e. ignore the nested subfolders that only contain folders).
-
-
-.. code-block:: python
-
-    for folder in fs.folders():
-        # do something
-
-
 Computing Size
 --------------
 
