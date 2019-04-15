@@ -135,9 +135,6 @@ Delete a file by address ID or path.
     fs.delete(address.id)
 
 
-**NOTE:** When a file is deleted, any parent directories above the file will also be deleted if they are empty directories.
-
-
 Advanced Usage
 ==============
 

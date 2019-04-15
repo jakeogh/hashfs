@@ -5,7 +5,7 @@ import os
 import string
 import py
 import pytest
-import hashfs
+from hashfs import HashFS, unshard
 
 
 @pytest.fixture
@@ -41,7 +41,7 @@ def filepath(testfile):
 
 @pytest.fixture
 def fs(testpath):
-    return hashfs.HashFS(str(testpath))
+    return HashFS(str(testpath))
 
 
 def put_range(fs, count):
@@ -171,7 +171,7 @@ def test_hashfs_delete(fs, stringio, address_attr):
     address = fs.put(stringio)
 
     fs.delete(getattr(address, address_attr))
-    assert len(os.listdir(fs.root)) == 0
+    assert len(os.listdir(fs.root)) == 1
 
 
 def test_hashfs_delete_error(fs):
@@ -187,45 +187,14 @@ def test_hashfs_delete_error(fs):
         fs.delete(('0' * (fs.digestlen - 1)) + 'z')
 
 
-def test_hashfs_remove_empty(fs):
-    subpath1 = os.path.join(fs.root, '1', '2', '3')
-    subpath2 = os.path.join(fs.root, '1', '4', '5')
-    subpath3 = os.path.join(fs.root, '6', '7', '8')
-
-    os.makedirs(subpath1)
-    os.makedirs(subpath2)
-    os.makedirs(subpath3)
-
-    assert os.path.exists(subpath1)
-    assert os.path.exists(subpath2)
-    assert os.path.exists(subpath3)
-
-    fs.remove_empty(subpath1)
-    fs.remove_empty(subpath3)
-
-    assert not os.path.exists(subpath1)
-    assert os.path.exists(subpath2)
-    assert not os.path.exists(subpath3)
-
-
-def test_hashfs_remove_empty_subdir(fs):
-    fs.remove_empty(fs.root)
-
-    assert os.path.exists(fs.root)
-
-    fs.remove_empty(os.path.realpath(os.path.join(fs.root, '..')))
-
-    assert os.path.exists(fs.root)
-
-
 def test_hashfs_unshard(fs, stringio):
     address = fs.put(stringio)
-    assert fs.unshard(address.abspath) == address.id
+    assert unshard(address.abspath) == address.id
 
 
 def test_hashfs_unshard_error(fs):
     with pytest.raises(ValueError):
-        fs.unshard('invalid')
+        unshard('invalid')
 
 
 def test_hashfs_digestpath(fs):
@@ -253,7 +222,7 @@ def test_hashfs_files(fs):
         assert os.path.isfile(file)
         assert file in addresses
         assert addresses[file].abspath == file
-        assert addresses[file].id == fs.unshard(file)
+        assert addresses[file].id == unshard(file)
 
 
 def test_hashfs_iter(fs):
@@ -266,7 +235,7 @@ def test_hashfs_iter(fs):
         assert os.path.isfile(file)
         assert file in addresses
         assert addresses[file].abspath == file
-        assert addresses[file].id == fs.unshard(file)
+        assert addresses[file].id == unshard(file)
 
     assert test_count == count
 

@@ -15,12 +15,14 @@ def compact(items):
     return [item for item in items if item]
 
 
-def issubdir(subpath, path):
-    """Return whether `subpath` is a sub-directory of `path`."""
-    # Append os.sep so that paths like /usr/var2/log doesn't match /usr/var.
-    path = os.path.realpath(path) + os.sep
-    subpath = os.path.realpath(subpath)
-    return subpath.startswith(path)
+def unshard(path):
+    """Unshard path to determine hash value."""
+    try:
+        assert os.path.sep in path
+    except AssertionError:
+        raise ValueError('Path must be absolute.')
+
+    return path.split(os.path.sep)[-1]
 
 
 class HashFS():
@@ -154,7 +156,7 @@ class HashFS():
         return io.open(realpath, mode)
 
     def delete(self, digest):
-        """Delete file using id. Remove any empty directories after deleting.
+        """Delete file using id.
 
         Args:
             digest (str): Address ID.
@@ -165,23 +167,6 @@ class HashFS():
         realpath = self.digestpath(digest)
         assert realpath.startswith(self.root)
         os.remove(realpath)
-        self.remove_empty(os.path.dirname(realpath))
-
-    def remove_empty(self, subpath):
-        """Successively remove all empty folders starting with `subpath` and
-        proceeding "up" through directory tree until reaching the :attr:`root`
-        folder.
-        """
-        # Don't attempt to remove any folders if subpath is not a
-        # subdirectory of the root directory.
-        if not self.haspath(subpath):
-            return
-
-        while subpath != self.root:
-            if os.listdir(subpath) or os.path.islink(subpath):
-                break
-            os.rmdir(subpath)
-            subpath = os.path.dirname(subpath)
 
     def files(self):
         """Return generator that yields all files in the :attr:`root`
@@ -221,12 +206,6 @@ class HashFS():
         """Check whether a given file digest exists on disk."""
         return os.path.isfile(self.digestpath(digest))
 
-    def haspath(self, path):
-        """Return whether `path` is a subdirectory of the :attr:`root`
-        directory.
-        """
-        return issubdir(path, self.root)
-
     def relpath(self, path):
         """Return `path` relative to the :attr:`root` directory."""
         return os.path.relpath(path, self.root)
@@ -258,7 +237,6 @@ class HashFS():
         """Compute hash of file using :attr:`algorithm`."""
         hashobj = hashlib.new(self.algorithm)
         for data in stream:
-            # hashobj.update(to_bytes(data))
             if isinstance(data, str):
                 data = bytes(data, 'UTF8')
             hashobj.update(data)
@@ -269,15 +247,6 @@ class HashFS():
         `width` from the first part of the digest plus the remainder."""
         return compact([digest[i * self.width:self.width * (i + 1)]
                         for i in range(self.depth)] + [digest])
-
-    def unshard(self, path):
-        """Unshard path to determine hash value."""
-        if not self.haspath(path):
-            raise ValueError(('Cannot unshard path. The path "{0}" is not '
-                              'a subdirectory of the root directory "{1}"'
-                              .format(path, self.root)))
-
-        return path.split(os.sep)[-1]
 
     def corrupted(self):
         """Return generator that yields corrupted files as ``(path, address)``
@@ -356,7 +325,6 @@ class Stream():
         else:
             raise ValueError(('Object must be a valid file path or '
                               'a readable object.'))
-
         self._obj = obj
         self._pos = pos
 
@@ -368,10 +336,8 @@ class Stream():
 
         while True:
             data = self._obj.read()
-
             if not data:
                 break
-
             yield data
 
         if self._pos is not None:
