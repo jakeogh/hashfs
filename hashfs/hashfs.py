@@ -7,6 +7,8 @@ import hashlib
 import io
 import os
 import shutil
+import attr
+import pathlib
 from tempfile import NamedTemporaryFile
 
 
@@ -25,6 +27,7 @@ def unshard(path):
     return path.split(os.path.sep)[-1]
 
 
+@attr.s(auto_attribs=True)
 class HashFS():
     """Content addressable file manager.
 
@@ -44,20 +47,16 @@ class HashFS():
             subdirectories. Defaults to ``0o755`` which allows owner/group to
             read/write and everyone else to read and everyone to execute.
     """
-    def __init__(self,
-                 root,
-                 depth=4,
-                 width=1,
-                 algorithm='sha256',
-                 fmode=0o664,
-                 dmode=0o755):
-        self.root = os.path.realpath(root)
-        self.depth = int(depth)
-        self.width = int(width)
-        self.algorithm = algorithm
-        self.digestlen = hashlib.new(algorithm).digest_size * 2
-        self.fmode = fmode
-        self.dmode = dmode
+    root: str = attr.ib(converter=pathlib.Path)
+    depth: int = 4
+    width: int = 1
+    algorithm: str = 'sha256'
+    fmode: int = 0o664
+    dmode: int = 0o755
+
+    def __attrs_post_init__(self):
+        self.root = self.root.resolve()
+        self.digestlen = hashlib.new(self.algorithm).digest_size * 2
 
     def put(self, file):
         """Store contents of `file` on disk using its content hash for the
@@ -165,7 +164,7 @@ class HashFS():
             FileNotFoundError: If file doesn't exist.
         """
         realpath = self.digestpath(digest)
-        assert realpath.startswith(self.root)
+        assert realpath.startswith(str(self.root))
         os.remove(realpath)
 
     def files(self):
@@ -205,10 +204,6 @@ class HashFS():
     def exists(self, digest):
         """Check whether a given file digest exists on disk."""
         return os.path.isfile(self.digestpath(digest))
-
-    def relpath(self, path):
-        """Return `path` relative to the :attr:`root` directory."""
-        return os.path.relpath(path, self.root)
 
     def digestpath(self, digest):
         """Build the file path for a given hash id.
@@ -260,12 +255,11 @@ class HashFS():
                 digest = self.computehash(stream)
 
             expected_path = self.digestpath(digest)
-
             if expected_path != path:
                 yield (path, HashAddress(digest, self, expected_path))
 
     def __contains__(self, digest):
-        """Return whether a given file digest is contained in the :attr:`root`
+        """Return whether a given digest is contained in the :attr:`root`
         directory.
         """
         return self.exists(digest)
@@ -280,9 +274,9 @@ class HashFS():
         return self.count()
 
 
-class HashAddress(namedtuple('HashAddress',
-                             ['id', 'fs', 'abspath', 'is_duplicate'])):
-    """File address containing file's path on disk and it's content hash ID.
+@attr.s(auto_attribs=True)
+class HashAddress():
+    """File address containing file's path on disk and it's content hash digest.
 
     Attributes:
         digest (str): Hash ID (hexdigest) of file contents.
@@ -292,15 +286,10 @@ class HashAddress(namedtuple('HashAddress',
             a duplicate of a previously existing file. Can only be ``True``
             after a put operation. Defaults to ``False``.
     """
-    def __new__(cls, digest, fs, abspath, is_duplicate=False):
-        return super(HashAddress, cls).__new__(cls,
-                                               digest,
-                                               fs,
-                                               abspath,
-                                               is_duplicate)
-
-    def __init__(self, digest, fs, abspath, is_duplicate=False):
-        self.relpath = fs.relpath(self.abspath)
+    digest: str
+    fs: HashFS
+    abspath: str
+    is_duplicate: bool = False
 
 
 class Stream():
