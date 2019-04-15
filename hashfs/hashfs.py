@@ -23,7 +23,7 @@ def issubdir(subpath, path):
     return subpath.startswith(path)
 
 
-class HashFS(object):
+class HashFS():
     """Content addressable file manager.
 
     Attributes:
@@ -135,8 +135,7 @@ class HashFS(object):
         realpath = self.digestpath(digest)
         if os.path.isfile(realpath):
             return HashAddress(digest, self, realpath)  # todo
-        else:
-            raise FileNotFoundError
+        raise FileNotFoundError
 
     def open(self, digest, mode='rb'):
         """Return open buffer object from given id.
@@ -188,7 +187,7 @@ class HashFS(object):
         """Return generator that yields all files in the :attr:`root`
         directory.
         """
-        for folder, subfolders, files in os.walk(self.root):
+        for folder, _, files in os.walk(self.root):
             for file in files:
                 yield os.path.abspath(os.path.join(folder, file))
 
@@ -196,7 +195,7 @@ class HashFS(object):
         """Return generator that yields all folders in the :attr:`root`
         directory that contain files.
         """
-        for folder, subfolders, files in os.walk(self.root):
+        for folder, _, files in os.walk(self.root):
             if files:
                 yield folder
 
@@ -335,7 +334,7 @@ class HashAddress(namedtuple('HashAddress',
         self.relpath = fs.relpath(self.abspath)
 
 
-class Stream(object):
+class Stream():
     """Common interface for file-like objects.
 
     The input `obj` can be a file-like object or a path to a file. If `obj` is
