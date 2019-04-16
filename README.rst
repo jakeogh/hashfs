@@ -22,7 +22,7 @@ Features
 - Can save files from local file paths or readable objects (open file handlers, IO buffers, etc).
 - Able to index all files and find corrupted hashes.
 - Supports any hashing algorithm available via ``hashlib.new``.
-- Python 3.4+ compatible.
+- Python 3.6+ compatible.
 
 
 Links
