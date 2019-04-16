@@ -100,11 +100,11 @@ class HashFS():
 
         if self.fmode is not None:
             oldmask = os.umask(0)
-
             try:
                 os.chmod(tmp.name, self.fmode)
             finally:
                 os.umask(oldmask)
+
         return tmp
 
     def _mvtemp(self, tmp, filepath):
@@ -153,7 +153,6 @@ class HashFS():
         Returns:
             HashAddress: File's hash address.
         """
-
         tmp = self._mktemp()
         digest = self.computehash(request, tmp)
         filepath = self.digestpath(digest)
@@ -241,24 +240,6 @@ class HashFS():
             for file in files:
                 yield os.path.abspath(os.path.join(folder, file))
 
-    def count(self):
-        """Return count of the number of files in the :attr:`root` directory.
-        """
-        count = 0
-        for _ in self:
-            count += 1
-        return count
-
-    def size(self):
-        """Return the total size in bytes of all files in the :attr:`root`
-        directory.
-        """
-        total = 0
-        for path in self.files():
-            total += os.path.getsize(path)
-
-        return total
-
     def exists(self, digest):
         """Check whether a given file digest exists on disk."""
         return os.path.isfile(self.digestpath(digest))
@@ -326,11 +307,6 @@ class HashFS():
     def __iter__(self):
         """Iterate over all files in the :attr:`root` directory."""
         return self.files()
-
-    def __len__(self):
-        """Return count of the number of files in the :attr:`root` directory.
-        """
-        return self.count()
 
 
 @attr.s(auto_attribs=True)

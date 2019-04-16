@@ -18,7 +18,7 @@ Features
 ========
 
 - Files are stored once and never duplicated.
-- Uses an efficient folder structure optimized for a large number of files. File paths are based on the content hash and are nested based on the first ``n`` number of characters.
+- Uses an efficient folder structure for a large number of files. File paths are based on the content hash, nested based on the first ``n`` number of characters.
 - Can save files from local file paths or readable objects (open file handlers, IO buffers, etc).
 - Able to index all files and find corrupted hashes.
 - Supports any hashing algorithm available via ``hashlib.new``.
@@ -39,7 +39,6 @@ Quickstart
 
 Install using pip:
 
-
 ::
 
     pip install hashfs
@@ -54,7 +53,6 @@ Initialization
 
 
 Designate a root folder for ``HashFS``. If the folder doesn't already exist, it will be created.
-
 
 .. code-block:: python
 
@@ -72,7 +70,7 @@ Designate a root folder for ``HashFS``. If the folder doesn't already exist, it 
 **NOTE:** The ``algorithm`` value should be a valid string argument to ``hashlib.new()``.
 
 
-Basic Usage
+Usage
 ===========
 
 ``HashFS`` supports file storage, retrieval, and removal.
@@ -81,16 +79,12 @@ Basic Usage
 Storing Content
 ---------------
 
-Add content to the folder using either readable objects (e.g. ``StringIO``) or file paths (e.g. ``'a/path/to/some/file'``).
+Add content to the folder using either python3 str's or file paths (e.g. ``'a/path/to/some/file'``).
 
 
 .. code-block:: python
 
-    from io import StringIO
-
-    some_content = StringIO('some content')
-
-    address = fs.put(some_content)
+    address = fs.putstr('some content')
 
     # The id of the file (i.e. the hexdigest of its contents).
     address.id
@@ -118,7 +112,6 @@ Retrieving Content
 
 Get a ``BufferedReader`` handler for an existing file by address ID.
 
-
 .. code-block:: python
 
     fileio = fs.open(address.id)
@@ -129,23 +122,15 @@ Removing Content
 
 Delete a file by address ID or path.
 
-
 .. code-block:: python
 
     fs.delete(address.id)
-
-
-Advanced Usage
-==============
-
-Below are some of the more advanced features of ``HashFS``.
 
 
 Walking Corrupted Files
 -----------------------
 
 Iterate over files that do not hash to their name.
-
 
 .. code-block:: python
 
@@ -161,7 +146,6 @@ Walking All Files
 
 Iterate over files.
 
-
 .. code-block:: python
 
     for file in fs.files():
@@ -172,30 +156,7 @@ Iterate over files.
         # do something
 
 
-Computing Size
---------------
-
-Compute the size in bytes of all files in the ``root`` directory.
-
-
-.. code-block:: python
-
-    total_bytes = fs.size()
-
-
-Count the total number of files.
-
-
-.. code-block:: python
-
-    total_files = fs.count()
-
-    # Or via len()...
-    total_files = len(fs)
-
-
 For more details, please see the full documentation at http://hashfs.readthedocs.org.
-
 
 
 .. |version| image:: http://img.shields.io/pypi/v/hashfs.svg?style=flat-square

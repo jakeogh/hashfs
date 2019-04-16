@@ -262,23 +262,3 @@ def test_hashfs_corrupted(fs, unicodestring):
     with open(address.abspath, 'ab') as fh:
         fh.write(b'f')
     assert len(list(fs.corrupted())) == 1
-
-
-def test_hashfs_count(fs):
-    count = 5
-    put_range(fs, count)
-    assert fs.count() == count
-
-
-def test_hashfs_len(fs):
-    count = 5
-    put_range(fs, count)
-    assert len(fs) == count
-
-
-def test_hashfs_size(fs):
-    fs.putstr(u'{0}'.format(string.ascii_lowercase))
-    fs.putstr(u'{0}'.format(string.ascii_uppercase))
-    expected = len(string.ascii_lowercase) + len(string.ascii_uppercase)
-
-    assert fs.size() == expected
