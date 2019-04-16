@@ -5,7 +5,6 @@ import pathlib
 import hashlib
 import io
 import os
-import shutil
 from tempfile import NamedTemporaryFile
 import attr
 
@@ -23,6 +22,8 @@ def unshard(path):
         raise ValueError('Path must be absolute.')
 
     return path.split(os.path.sep)[-1]
+
+# def hasher()
 
 
 def hash_file(path, algorithm, tmp=None):
@@ -83,6 +84,8 @@ class HashFS():
     def __attrs_post_init__(self):
         self.root = self.root.resolve()
         self.digestlen = hashlib.new(self.algorithm).digest_size * 2
+        self.emptydigest = getattr(hashlib, self.algorithm)(b'').hexdigest()
+        assert len(self.emptydigest) == self.digestlen
         assert self.depth > 0
         assert self.width > 0
 
@@ -108,22 +111,47 @@ class HashFS():
         return tmp
 
     def _mvtemp(self, tmp, filepath):
-        if not os.path.isfile(filepath):
-            # Only move file if it doesn't already exist.
-            is_duplicate = False
-            assert os.path.getsize(tmp.name) > 0
-            try:
-                shutil.move(tmp.name, filepath)
-            except FileNotFoundError:
-                os.makedirs(os.path.dirname(filepath), self.dmode)
-                shutil.move(tmp.name, filepath)
-        else:
-            is_duplicate = True
-            tmp_size = os.path.getsize(tmp.name)
-            existing_size = os.path.getsize(filepath)
-            assert tmp_size == existing_size
+        """Move file (even if empty) to filepath on same filesystem.
 
-        return is_duplicate
+        Args:
+            tmp (str): Source path.  # TODO accept non-unicode filenames
+            filepath (str): Destination path. Must be on same filesystem tmp.
+
+        Returns:
+            (bool): True if filepath already existed.
+        """
+
+        # if filepath does not exist, rename now
+        try:
+            os.link(tmp, filepath)
+        except FileExistsError:
+            os.unlink(tmp)
+            return True
+            # link() returned -1 EEXIST (File exists)
+            # at this point a special case could be checked
+            # the clde below never gets hit, leaving here to review later
+            # dont need to touch the filesystem to know if filepath is empty
+            if filepath.split(os.path.sep)[-1] == self.emptydigest:
+                # the file on disk is zero size, otherwise it would not have
+                # the emptydigest as its name, there is nothing more to do
+                # since tmp is also known to be zero size by virtue of hashlib
+                # generating the emptydigest from it.
+                pass
+            else:
+                # tried replacing an assumed nonzero file
+                # its gotta be nonzero because its not named the emptyhash.
+                # stat() could make sure, but then we stat() every
+                # pre-existing non-empty file instead of skipping atomically
+                # it could be zero bytes
+                # or
+                # it could be != tmp's bytecount
+                pass
+        except FileNotFoundError:
+            os.makedirs(os.path.dirname(filepath), self.dmode)
+            os.link(tmp, filepath)
+            os.unlink(tmp)  # only if link() didnt throw exception
+
+        return False  # file did not already exist
 
     def putstr(self, string):
         """Store contents of `string` on disk using its content hash for the
@@ -139,7 +167,9 @@ class HashFS():
         tmp = self._mktemp()
         digest = self.computehash(string, tmp)
         filepath = self.digestpath(digest)
-        is_duplicate = self._mvtemp(tmp, filepath)
+        # could use SpooledTemporaryFile to save disk hits
+        # or hash without a temp file
+        is_duplicate = self._mvtemp(tmp.name, filepath)
 
         return HashAddress(digest, self, filepath, is_duplicate)
 
@@ -156,7 +186,7 @@ class HashFS():
         tmp = self._mktemp()
         digest = self.computehash(request, tmp)
         filepath = self.digestpath(digest)
-        is_duplicate = self._mvtemp(tmp, filepath)
+        is_duplicate = self._mvtemp(tmp.name, filepath)
 
         return HashAddress(digest, self, filepath, is_duplicate)
 
@@ -177,7 +207,7 @@ class HashFS():
             digest = hash_file_handle(file, self.algorithm, tmp)
 
         filepath = self.digestpath(digest)
-        is_duplicate = self._mvtemp(tmp, filepath)
+        is_duplicate = self._mvtemp(tmp.name, filepath)
 
         return HashAddress(digest, self, filepath, is_duplicate)
 

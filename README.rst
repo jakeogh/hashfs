@@ -52,7 +52,7 @@ Initialization
     from hashfs import HashFS
 
 
-Designate a root folder for ``HashFS``. If the folder doesn't already exist, it will be created.
+Designate a root folder for ``HashFS``. If the folder doesn't already exist, it will be created on the first write.
 
 .. code-block:: python
 
@@ -154,6 +154,7 @@ Iterate over files.
     # Or using the class' iter method...
     for file in fs:
         # do something
+
 
 
 For more details, please see the full documentation at http://hashfs.readthedocs.org.

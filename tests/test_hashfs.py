@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from io import StringIO, BufferedReader
+from io import BufferedReader
 import os
 import string
 import py
@@ -113,6 +113,13 @@ def test_hashfs_putstr(fs):
     assert \
         address.digest == \
         '2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae'
+
+
+def test_hashfs_putstr_empty(fs):
+    address = fs.putstr('')
+    assert \
+        address.digest == \
+        'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
 
 
 def test_hashfs_address(fs, unicodestring):
