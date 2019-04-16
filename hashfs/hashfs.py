@@ -97,10 +97,12 @@ class HashFS():
         TODO FIX: A second HashFS instance might return a tempfile in .files()
         """
         try:
-            tmp = NamedTemporaryFile(delete=False, dir=self.root, prefix='_')
+            tmp = NamedTemporaryFile(delete=False, dir=self.root,
+                                     prefix='_tmp')
         except FileNotFoundError:
             os.makedirs(self.root)
-            tmp = NamedTemporaryFile(delete=False, dir=self.root, prefix='_')
+            tmp = NamedTemporaryFile(delete=False, dir=self.root,
+                                     prefix='_tmp')
 
         if self.fmode is not None:
             oldmask = os.umask(0)
@@ -121,7 +123,6 @@ class HashFS():
         Returns:
             (bool): True if filepath already existed.
         """
-        assert isinstance(tmp, str)  # delme
         # if filepath does not exist, rename now
         try:
             os.link(tmp, filepath)
@@ -153,12 +154,8 @@ class HashFS():
         except FileNotFoundError:
             os.makedirs(os.path.dirname(filepath), self.dmode)
             os.link(tmp, filepath)
-            os.unlink(tmp)  # only if link() didnt throw exception
-            try:
-                os.stat(tmp)
-            except FileNotFoundError:
-                pass
 
+        os.unlink(tmp)  # only if link() didnt throw exception
         return False  # file did not already exist
 
     def putstr(self, string):
@@ -171,7 +168,11 @@ class HashFS():
         Returns:
             HashAddress: File's hash address.
         """
-        string = io.StringIO(string)
+        try:
+            string = io.StringIO(string)
+        except TypeError:
+            string = io.BytesIO(string)
+
         tmp = self._mktemp()
         digest = self.computehash(string, tmp)
         filepath = self.digestpath(digest)

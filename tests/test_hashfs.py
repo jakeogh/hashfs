@@ -62,6 +62,11 @@ def unicodestring():
 
 
 @pytest.fixture
+def all_bytes():
+    return set([bytes(chr(x), encoding='Latin-1') for x in range(0, 256)])
+
+
+@pytest.fixture
 def filepath_outside_fsroot(testfile_outside_fsroot):
     testfile_outside_fsroot.write(b'foo')
     return testfile_outside_fsroot
@@ -105,14 +110,6 @@ def assert_file_put(fs, address):
     # assert len(list(fs.files())) == 1
 
 
-def test_hashfs_put_str(fs):
-    address = fs.putstr('foo')
-    assert_file_put(fs, address)
-    with open(address.abspath, 'rb') as fileobj:
-        assert fileobj.read() == bytes('foo', 'UTF8')
-    assert len(list(fs.files())) == 1
-
-
 def test_hashfs_put_fileobj_from_inside_root(fs, fileio_fsroot):
     with pytest.raises(ValueError):
         fs.putfile(fileio_fsroot)
@@ -149,6 +146,38 @@ def test_hashfs_put_duplicate(fs, unicodestring):
 
 
 def test_hashfs_putstr(fs):
+    address = fs.putstr('foo')
+    assert_file_put(fs, address)
+    with open(address.abspath, 'rb') as fileobj:
+        assert fileobj.read() == bytes('foo', 'UTF8')
+    assert len(list(fs.files())) == 1
+
+
+def test_hashfs_putstr_bytes(fs):
+    address = fs.putstr(b'bar')
+    assert_file_put(fs, address)
+    with open(address.abspath, 'rb') as fileobj:
+        assert fileobj.read() == bytes('bar', 'UTF8')
+
+    address = fs.putstr(b'barfoo')
+    assert_file_put(fs, address)
+    with open(address.abspath, 'rb') as fileobj:
+        assert fileobj.read() == bytes('barfoo', 'UTF8')
+
+    assert len(list(fs.files())) == 2
+
+
+def test_hashfs_putstr_bytes_all(fs, all_bytes):
+    for onebyte in all_bytes:
+        address = fs.putstr(onebyte)
+        assert_file_put(fs, address)
+        with open(address.abspath, 'rb') as fileobj:
+            assert fileobj.read() == onebyte
+
+    assert len(list(fs.files())) == 256
+
+
+def test_hashfs_putstr_foo(fs):
     address = fs.putstr('foo')
     assert \
         address.digest == \
