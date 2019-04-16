@@ -23,35 +23,30 @@ def unshard(path):
 
     return path.split(os.path.sep)[-1]
 
-# def hasher()
 
-
-def hash_file(path, algorithm, tmp=None):
+def hash_readable(handle, algorithm, tmp):
     block_size = 256 * 128 * 2
     hasher = hashlib.new(algorithm)
-    with open(path, 'rb') as handle:
-        for chunk in iter(lambda: handle.read(block_size), b''):
-            hasher.update(chunk)
-            if tmp:
-                tmp.write(chunk)
-        if tmp:
-            tmp.close()
-    return hasher.hexdigest()
-
-
-def hash_file_handle(handle, algorithm, tmp=None):
-    block_size = 256 * 128 * 2
-    hasher = hashlib.new(algorithm)
-    pos = handle.tell()
     for chunk in iter(lambda: handle.read(block_size), b''):
         hasher.update(chunk)
         if tmp:
             tmp.write(chunk)
     if tmp:
         tmp.close()
-
-    handle.seek(pos)
     return hasher.hexdigest()
+
+
+def hash_file(path, algorithm, tmp=None):
+    with open(path, 'rb') as handle:
+        digest = hash_readable(handle, algorithm, tmp)
+    return digest
+
+
+def hash_file_handle(handle, algorithm, tmp=None):
+    pos = handle.tell()
+    digest = hash_readable(handle, algorithm, tmp)
+    handle.seek(pos)
+    return digest
 
 
 @attr.s(auto_attribs=True)
