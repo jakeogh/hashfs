@@ -1,7 +1,7 @@
 """Module for HashFS class.
 """
 
-import pathlib
+from pathlib import Path
 import hashlib
 import io
 import os
@@ -36,17 +36,23 @@ def hash_readable(handle, algorithm, tmp):
     return hasher.hexdigest()
 
 
-def hash_file(path, algorithm, tmp=None):
+def hash_file(path, algorithm, tmp):
     with open(path, 'rb') as handle:
         digest = hash_readable(handle, algorithm, tmp)
     return digest
 
 
-def hash_file_handle(handle, algorithm, tmp=None):
+def hash_file_handle(handle, algorithm, tmp):
     pos = handle.tell()
     digest = hash_readable(handle, algorithm, tmp)
     handle.seek(pos)
     return digest
+
+
+def path_is_parent(parent, child):
+    parent = parent.expanduser().resolve()
+    child = child.expanduser().resolve()
+    return os.path.commonpath([parent]) == os.path.commonpath([parent, child])
 
 
 @attr.s(auto_attribs=True)
@@ -69,7 +75,7 @@ class HashFS():
             subdirectories. Defaults to ``0o755`` which allows owner/group to
             read/write and everyone else to read and everyone to execute.
     """
-    root: str = attr.ib(converter=pathlib.Path)
+    root: str = attr.ib(converter=Path)
     depth: int = 3
     width: int = 1
     algorithm: str = 'sha256'
@@ -91,10 +97,10 @@ class HashFS():
         TODO FIX: A second HashFS instance might return a tempfile in .files()
         """
         try:
-            tmp = NamedTemporaryFile(delete=False, dir=self.root)
+            tmp = NamedTemporaryFile(delete=False, dir=self.root, prefix='_')
         except FileNotFoundError:
             os.makedirs(self.root)
-            tmp = NamedTemporaryFile(delete=False, dir=self.root)
+            tmp = NamedTemporaryFile(delete=False, dir=self.root, prefix='_')
 
         if self.fmode is not None:
             oldmask = os.umask(0)
@@ -115,7 +121,7 @@ class HashFS():
         Returns:
             (bool): True if filepath already existed.
         """
-
+        assert isinstance(tmp, str)  # delme
         # if filepath does not exist, rename now
         try:
             os.link(tmp, filepath)
@@ -126,6 +132,8 @@ class HashFS():
             # at this point a special case could be checked
             # the clde below never gets hit, leaving here to review later
             # dont need to touch the filesystem to know if filepath is empty
+            # pylint: disable=W0101
+            # W0101: Unreachable code (unreachable)
             if filepath.split(os.path.sep)[-1] == self.emptydigest:
                 # the file on disk is zero size, otherwise it would not have
                 # the emptydigest as its name, there is nothing more to do
@@ -141,10 +149,15 @@ class HashFS():
                 # or
                 # it could be != tmp's bytecount
                 pass
+            # pylint: enable=W0101
         except FileNotFoundError:
             os.makedirs(os.path.dirname(filepath), self.dmode)
             os.link(tmp, filepath)
             os.unlink(tmp)  # only if link() didnt throw exception
+            try:
+                os.stat(tmp)
+            except FileNotFoundError:
+                pass
 
         return False  # file did not already exist
 
@@ -195,6 +208,14 @@ class HashFS():
         Returns:
             HashAddress: File's hash address.
         """
+        if hasattr(file, 'name'):
+            name = Path(file.name)
+        else:
+            name = Path(file)
+        if path_is_parent(self.root, name):
+            raise ValueError("Error: {0} exists within the hashfs"
+                             "root: {1}".format(name, self.root))
+
         tmp = self._mktemp()
         try:
             digest = hash_file(file, self.algorithm, tmp)
@@ -317,7 +338,7 @@ class HashFS():
         the :class:`HashAddress` of the expected location.
         """
         for path in self.files():
-            digest = hash_file(path, self.algorithm)
+            digest = hash_file(path, self.algorithm, tmp=None)
             assert len(digest) == len(path.split(os.path.sep)[-1])
             expected_path = self.digestpath(digest)
             if expected_path != path:
