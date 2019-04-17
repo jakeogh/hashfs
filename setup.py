@@ -12,11 +12,9 @@ def read(fname):
 
 
 meta = {}
-exec(read('hashfs/__meta__.py'), meta)
+exec(read('uhashfs/__meta__.py'), meta)
 
 readme = read('README.rst')
-changes = read('CHANGES.rst')
-
 
 class Tox(TestCommand):
     user_options = [
@@ -49,7 +47,7 @@ setup(
     author=meta['__author__'],
     author_email=meta['__email__'],
     description=meta['__summary__'],
-    long_description=readme + '\n\n' + changes,
+    long_description=readme,
     packages=find_packages(exclude=['tests']),
     install_requires=meta['__install_requires__'],
     tests_require=meta['__tests_require__'],
@@ -57,10 +55,10 @@ setup(
     test_suite='tests',
     entry_points={
         'console_scripts': [
-            'hashfs = hashfs.cli.cli:cli',
+            'uhashfs = uhashfs.cli.cli:cli',
         ],
     },
-    keywords='hashfs hash file system content addressable fixed storage',
+    keywords='uhashfs hash file system content addressable fixed storage',
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Developers',

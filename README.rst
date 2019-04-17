@@ -1,11 +1,10 @@
 ******
-HashFS
+uHashFS
 ******
 
-|version| |travis| |coveralls| |license|
+uHashFS is based on HashFs: https://github.com/dgilland/hashfs
 
-
-HashFS is a content-addressable file management system. What does that mean? Simply, that HashFS manages a directory where files are saved based on the file's hash.
+uHashFS is a content-addressable file management, it manages a directory tree where files are saved based on their hash.
 
 Typical use cases for this kind of system are ones where:
 
@@ -28,10 +27,9 @@ Features
 Links
 =====
 
-- Project: https://github.com/dgilland/hashfs
-- Documentation: http://hashfs.readthedocs.org
-- PyPI: https://pypi.python.org/pypi/hashfs/
-- TravisCI: https://travis-ci.org/dgilland/hashfs
+- Project: https://github.com/jakeogh/uhashfs
+- Original uHashFs Project: https://github.com/dgilland/hashfs
+- PyPI: https://pypi.python.org/pypi/uhashfs (todo)
 
 
 Quickstart
@@ -41,7 +39,7 @@ Install using pip:
 
 ::
 
-    pip install hashfs
+    pip install uhashfs (todo)
 
 
 Initialization
@@ -49,16 +47,18 @@ Initialization
 
 .. code-block:: python
 
-    from hashfs import HashFS
+    from uhashfs import uHashFS
 
 
-Designate a root folder for ``HashFS``. If the folder doesn't already exist, it will be created on the first write.
+Designate a root folder for ``uHashFS``. If the folder doesn't already exist, it will be created on the first write.
+A second folder (defaulting to root + '.tmp' will also be created if not specified via tmproot. It needs to reside
+on the same filesystem as the root folder.
 
 .. code-block:: python
 
     # Set the `depth` to the number of subfolders the file's hash should be split when saving.
     # Set the `width` to the desired width of each subfolder.
-    fs = HashFS('temp_hashfs', depth=4, width=1, algorithm='sha256')
+    fs = uHashFS(root='temp_hashfs', depth=4, width=1, algorithm='sha256')
 
     # With depth=4 and width=1, files will be saved in the following pattern:
     # temp_hashfs/a/b/c/d/abcdefghijklmnopqrstuvwxyz
@@ -73,7 +73,7 @@ Designate a root folder for ``HashFS``. If the folder doesn't already exist, it 
 Usage
 ===========
 
-``HashFS`` supports file storage, retrieval, and removal.
+``uHashFS`` supports file storage, retrieval, and removal.
 
 
 Storing Content
@@ -84,16 +84,20 @@ Add content to the folder using either python3 str's or file paths (e.g. ``'a/pa
 
 .. code-block:: python
 
-    address = fs.putstr('some content')
+   from uhashfs import uHashFS
 
-    # The id of the file (i.e. the hexdigest of its contents).
-    address.id
+   fs = uHashFS(root="/home/user/hashfs", tmpdir="/home/user/hashfs.tmp")
 
-    # The absolute path where the file was saved.
-    address.abspath
+   address = fs.putstr('some content')
 
-    # Whether the file previously existed.
-    address.is_duplicate
+   # The id of the file (i.e. the hexdigest of its contents).
+   address.id
+
+   # The absolute path where the file was saved.
+   address.abspath
+
+   # Whether the file previously existed.
+   address.is_duplicate
 
 
 Retrieving File Address
@@ -138,7 +142,7 @@ Iterate over files that do not hash to their name.
         # do something
 
 
-**WARNING:** ``HashFS.corrupted()`` is a generator so be aware that modifying the file system while iterating could have unexpected results.
+**WARNING:** ``uHashFS.corrupted()`` is a generator so be aware that modifying the file system while iterating could have unexpected results.
 
 
 Walking All Files
@@ -155,19 +159,3 @@ Iterate over files.
     for file in fs:
         # do something
 
-
-
-For more details, please see the full documentation at http://hashfs.readthedocs.org.
-
-
-.. |version| image:: http://img.shields.io/pypi/v/hashfs.svg?style=flat-square
-    :target: https://pypi.python.org/pypi/hashfs/
-
-.. |travis| image:: http://img.shields.io/travis/dgilland/hashfs/master.svg?style=flat-square
-    :target: https://travis-ci.org/dgilland/hashfs
-
-.. |coveralls| image:: http://img.shields.io/coveralls/dgilland/hashfs/master.svg?style=flat-square
-    :target: https://coveralls.io/r/dgilland/hashfs
-
-.. |license| image:: http://img.shields.io/pypi/l/hashfs.svg?style=flat-square
-    :target: https://pypi.python.org/pypi/hashfs/

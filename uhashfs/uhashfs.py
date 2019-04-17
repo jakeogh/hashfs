@@ -1,10 +1,10 @@
-"""Module for HashFS class.
-"""
+"""Module for uHashFS class."""
 
 from pathlib import Path
 import hashlib
 import io
 import os
+import sys
 from tempfile import NamedTemporaryFile
 import attr
 
@@ -55,12 +55,14 @@ def path_is_parent(parent, child):
     return os.path.commonpath([parent]) == os.path.commonpath([parent, child])
 
 
-@attr.s(auto_attribs=True)
-class HashFS():
+@attr.s(auto_attribs=True, kw_only=True)
+class uHashFS():
     """Content addressable file manager.
 
     Attributes:
         root (str): Directory path used as root of storage space.
+        tmproot (str): Optional directory used for NamedTemporaryFile storage
+            space. Defaults to the hashfs root. Must be on the same filesystem.
         depth (int, optional): Depth of subfolders to create when saving a
             file.
         width (int, optional): Width of each subfolder to create when saving a
@@ -76,6 +78,8 @@ class HashFS():
             read/write and everyone else to read and everyone to execute.
     """
     root: str = attr.ib(converter=Path)
+    tmproot: str = attr.ib(converter=Path)
+    #tmproot: str = attr.ib(converter=Path, default=root)
     depth: int = 3
     width: int = 1
     algorithm: str = 'sha256'
@@ -94,14 +98,14 @@ class HashFS():
         """Create a named temporary file and return its filename. The
         temporary file is geneated in the hasfs root to make move()'s by
         rename instead of copy/delete.
-        TODO FIX: A second HashFS instance might return a tempfile in .files()
+        TODO FIX: A second uHashFS instance might return a tempfile in .files()
         """
         try:
-            tmp = NamedTemporaryFile(delete=False, dir=self.root,
+            tmp = NamedTemporaryFile(delete=False, dir=self.tmproot,
                                      prefix='_tmp')
         except FileNotFoundError:
-            os.makedirs(self.root)
-            tmp = NamedTemporaryFile(delete=False, dir=self.root,
+            os.makedirs(self.tmproot)
+            tmp = NamedTemporaryFile(delete=False, dir=self.tmproot,
                                      prefix='_tmp')
 
         if self.fmode is not None:
@@ -314,17 +318,44 @@ class HashFS():
         paths = self.shard(digest)
         return os.path.join(self.root, *paths)
 
+    def _print_status(self, name, current_size, expected_size, end):
+        return
+        if expected_size:
+            print(str(int((current_size / expected_size) * 100)) + '%',
+                  current_size, name, end='\r',
+                  flush=True, file=sys.stderr)
+        else:
+            print(current_size, name, end='\r',
+                  flush=True, file=sys.stderr)
+        if end:
+            print("", file=sys.stderr)
+
     def computehash(self, stream, tmp):
         """Compute hash of file using :attr:`algorithm`."""
         hashobj = hashlib.new(self.algorithm)
+        #print("type(sream):", type(stream))
+        try:
+            header_size = int(stream.headers['Content-Length'])
+        except (KeyError, AttributeError):
+            header_size = False
+
         for chunk in stream:
             if isinstance(chunk, str):
                 chunk = bytes(chunk, 'UTF8')
             hashobj.update(chunk)
             if tmp:
                 tmp.write(chunk)
+                file_size = int(os.path.getsize(tmp.name))
+                self._print_status(name=tmp.name,
+                                   current_size=file_size,
+                                   expected_size=header_size, end=False)
         if tmp:
             tmp.close()
+            file_size = int(os.path.getsize(tmp.name))
+            self._print_status(name=tmp.name,
+                               current_size=file_size,
+                               expected_size=header_size, end=True)
+
         return hashobj.hexdigest()
 
     def shard(self, digest):
@@ -336,7 +367,7 @@ class HashFS():
     def corrupted(self):
         """Return generator that yields corrupted files as ``(path, address)``
         where ``path`` is the path of the corrupted file and ``address`` is
-        the :class:`HashAddress` of the expected location.
+        the :class:`HashAddress` of the expected location(hash).
         """
         for path in self.files():
             digest = hash_file(path, self.algorithm, tmp=None)
@@ -369,6 +400,6 @@ class HashAddress():
             after a put operation. Defaults to ``False``.
     """
     digest: str
-    fs: HashFS
+    fs: uHashFS
     abspath: str
     is_duplicate: bool = False

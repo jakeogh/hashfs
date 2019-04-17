@@ -12,7 +12,7 @@ Types of Contributions
 Report Bugs
 +++++++++++
 
-Report bugs at https://github.com/dgilland/hashfs/issues.
+Report bugs at https://github.com/jakeogh/uhashfs/issues.
 
 If you are reporting a bug, please include:
 
@@ -33,16 +33,12 @@ Implement Features
 Look through the GitHub issues for features. Anything tagged with "enhancement" or "help wanted" is open to whoever wants to implement it.
 
 
-Write Documentation
-+++++++++++++++++++
-
-HashFS could always use more documentation, whether as part of the official HashFS docs, in docstrings, or even on the web in blog posts, articles, and such.
 
 
 Submit Feedback
 +++++++++++++++
 
-The best way to send feedback is to file an issue at https://github.com/dgilland/hashfs/issues.
+The best way to send feedback is to file an issue at https://github.com/jakeogh/uhashfs/issues.
 
 If you are proposing a feature:
 
@@ -54,16 +50,16 @@ If you are proposing a feature:
 Get Started!
 ------------
 
-Ready to contribute? Here's how to set up ``hashfs`` for local development.
+Ready to contribute? Here's how to set up ``uhashfs`` for local development.
 
-1. Fork the ``hashfs`` repo on GitHub.
+1. Fork the ``uhashfs`` repo on GitHub.
 2. Clone your fork locally::
 
-    $ git clone git@github.com:your_name_here/hashfs.git
+    $ git clone git@github.com:your_name_here/uhashfs.git
 
 3. Install your local copy into a virtualenv. Assuming you have virtualenv installed, this is how you set up your fork for local development::
 
-    $ cd hashfs
+    $ cd uhashfs
     $ make build
 
 4. Create a branch for local development::
@@ -94,7 +90,7 @@ Before you submit a pull request, check that it meets these guidelines:
 
 1. The pull request should include tests.
 2. If the pull request adds functionality, the docs should be updated. Put your new functionality into a function with a docstring, and add the feature to the README.rst.
-3. The pull request should work for Python 3.6+. Check https://travis-ci.org/dgilland/hashfs/pull_requests and make sure that the tests pass for all supported Python versions.
+3. The pull request should work for Python 3.6+.
 
 
 Project CLI
@@ -145,7 +141,7 @@ Run unittests under the virtualenv's default Python version. Does not test all s
 make test-full
 ++++++++++++++
 
-Run unittest and linting for all supported Python versions. **NOTE:** This will fail if you do not have all Python versions installed on your system. If you are on an Ubuntu based system, the `Dead Snakes PPA`_ is a good resource for easily installing multiple Python versions. If for whatever reason you're unable to have all Python versions on your development machine, note that Travis-CI will run full integration tests on all pull requests.
+Run unittest and linting for all supported Python versions. **NOTE:** This will fail if you do not have all Python versions installed on your system. If you are on an Ubuntu based system, the `Dead Snakes PPA`_ is a good resource for easily installing multiple Python versions.
 
 ::
 

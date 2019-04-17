@@ -3,7 +3,7 @@
 import sys
 import click
 import hashlib
-from hashfs import HashFS
+from uhashfs import uHashFS
 
 
 @click.group()
@@ -18,7 +18,7 @@ from hashfs import HashFS
 @click.option('--verbose', is_flag=True)
 @click.pass_context
 def cli(ctx, root, depth, width, algorithm, fmode, dmode, verbose):
-    ctx.obj = HashFS(root, depth, width, algorithm, fmode, dmode)
+    ctx.obj = uHashFS(root, depth, width, algorithm, fmode, dmode)
     if verbose:
         print(ctx.obj, file=sys.stderr)
 
@@ -29,7 +29,7 @@ def cli(ctx, root, depth, width, algorithm, fmode, dmode, verbose):
 def put(obj, infiles):
     for infile in infiles:
         item = obj.putfile(infile)
-        print("put:", infile.name, item.digest)
+        print(item.digest, infile.name)
 
 
 @cli.command()
@@ -38,7 +38,7 @@ def put(obj, infiles):
 def get(obj, digests):
     for digest in digests:
         item = obj.get(digest)
-        print("get:", digest + ':', item.abspath)
+        print(item.abspath)
 
 
 @cli.command()
@@ -62,9 +62,9 @@ def iterate(obj):
 
 @cli.command()
 @click.pass_obj
-def checkcorruption(obj):
+def checkcorrupt(obj):
     for hashfile in obj.corrupted():
-        print("corrupt file:", hashfile)
+        print("corrupt:", hashfile)
 
 
 if __name__ == '__main__':
