@@ -62,7 +62,7 @@ def iterate(obj):
 
 @cli.command()
 @click.pass_obj
-def check(obj):
+def checkcorruption(obj):
     for hashfile in obj.corrupted():
         print("corrupt file:", hashfile)
 
