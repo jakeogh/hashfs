@@ -22,6 +22,7 @@ Features
 - Able to index all files and find corrupted hashes.
 - Supports any hashing algorithm available via ``hashlib.new``.
 - Python 3.6+ compatible.
+- Optional integration with https://github.com/bup/bup
 
 
 Links
