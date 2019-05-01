@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""uHashFS is a content-addressable file management system.
+"""uhashfs is a content-addressable file management system.
 
-uHashFS manages a directory where files are saved based on the file's hash.
+It manages a directory tree where files are saved based on the file's hash.
 
 Typical use cases for this kind of system are ones where:
 

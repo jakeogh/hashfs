@@ -1,10 +1,10 @@
 ******
-uHashFS
+uhashfs
 ******
 
-uHashFS is based on HashFs: https://github.com/dgilland/hashfs
+uhashfs is based on HashFs: https://github.com/dgilland/hashfs
 
-uHashFS is a content-addressable file management, it manages a directory tree where files are saved based on their hash.
+uhashfs is a content-addressable file management, it manages a directory tree where files are saved based on their hash.
 
 Typical use cases for this kind of system are ones where:
 
@@ -74,7 +74,7 @@ on the same filesystem as the root folder.
 Usage
 ===========
 
-``uHashFS`` supports file storage, retrieval, and removal.
+``uhashfs`` supports file storage, retrieval, and removal.
 
 
 Storing Content
