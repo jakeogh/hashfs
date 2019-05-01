@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""HashFS is a content-addressable file management system. What does that mean?
-Simply, that HashFS manages a directory where files are saved based on the
-file's hash.
+"""uHashFS is a content-addressable file management system.
+
+uHashFS manages a directory where files are saved based on the file's hash.
 
 Typical use cases for this kind of system are ones where:
 
@@ -20,7 +20,7 @@ from .__meta__ import (
     __license__
 )
 
-from .hashfs import HashFS, HashAddress
+from .uhashfs import uHashFS, HashAddress, unshard
 
 
-__all__ = ('HashFS', 'HashAddress')
+__all__ = ('uHashFS', 'HashAddress', 'unshard')

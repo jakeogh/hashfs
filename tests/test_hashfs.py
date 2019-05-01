@@ -1,276 +1,340 @@
 # -*- coding: utf-8 -*-
 
-from io import StringIO, BufferedReader
+from io import BufferedReader
 import os
 import string
-
 import py
 import pytest
+import time
+from uhashfs import uHashFS, unshard
 
-import hashfs
-from hashfs._compat import to_bytes
-
-
-@pytest.fixture
-def testpath(tmpdir):
-    return tmpdir.mkdir('hashfs')
+TIMESTAMP = str(time.time())
 
 
 @pytest.fixture
-def testfile(testpath):
-    return testpath.join('hashfs.txt')
+def testpath_outside_fsroot(tmpdir):
+    return tmpdir.mkdir('uhashfs_input_files_' + TIMESTAMP)
 
 
 @pytest.fixture
-def stringio():
-    return StringIO(u'foo')
+def testpath_fsroot(tmpdir):
+    return tmpdir.mkdir('uhashfs_root' + TIMESTAMP)
+
+
+@pytest.fixture
+def testpath_fsroot_tmp(tmpdir):
+    return tmpdir.mkdir('uhashfs_root' + TIMESTAMP + '.tmp')
+
+
+@pytest.fixture
+def fs_relative():
+    return uHashFS(root='relative_path' + TIMESTAMP,
+                   tmproot='relative_path' + TIMESTAMP + '.tmp')
+
+
+@pytest.fixture
+def testfile_outside_fsroot(testpath_outside_fsroot):
+    return testpath_outside_fsroot.join('uhashfs.txt')
+
+
+@pytest.fixture
+def testfile_fsroot(testpath_fsroot):
+    return testpath_fsroot.join('uhashfs.txt')
 
 
 @pytest.yield_fixture
-def fileio(testfile):
-    with open(str(testfile), 'wb') as io:
+def fileio_outside_fsroot(testfile_outside_fsroot):
+    with open(str(testfile_outside_fsroot), 'wb') as io:
         io.write(b'foo')
 
-    io = open(str(testfile), 'rb')
-
+    io = open(str(testfile_outside_fsroot), 'rb')
     yield io
+    io.close()
 
+
+@pytest.yield_fixture
+def fileio_fsroot(testfile_fsroot):
+    with open(str(testfile_fsroot), 'wb') as io:
+        io.write(b'foo')
+
+    io = open(str(testfile_fsroot), 'rb')
+    yield io
     io.close()
 
 
 @pytest.fixture
-def filepath(testfile):
-    testfile.write(b'foo')
-    return testfile
+def unicodestring():
+    return 'foo'
 
 
 @pytest.fixture
-def fs(testpath):
-    return hashfs.HashFS(str(testpath))
+def all_bytes():
+    return set([bytes(chr(x), encoding='Latin-1') for x in range(0, 256)])
 
 
-def put_range(fs, count):
+@pytest.fixture
+def filepath_outside_fsroot(testfile_outside_fsroot):
+    testfile_outside_fsroot.write(b'foo')
+    return testfile_outside_fsroot
+
+
+@pytest.fixture
+def filepath_fsroot(testfile_fsroot):
+    testfile_fsroot.write(b'foo')
+    return testfile_fsroot
+
+
+@pytest.fixture
+def fs(testpath_fsroot, testpath_fsroot_tmp):
+    return uHashFS(root=str(testpath_fsroot), tmproot=str(testpath_fsroot_tmp))
+
+
+@pytest.fixture
+def fssha1(testpath_fsroot, testpath_fsroot_tmp):
+    return uHashFS(root=str(testpath_fsroot),
+                   tmproot=str(testpath_fsroot_tmp), algorithm='sha1')
+
+
+def putstr_range(fs, count):
     return dict((address.abspath, address)
-                for address in (fs.put(StringIO(u'{0}'.format(i)))
+                for address in (fs.putstr(u'{0}'.format(i))
                                 for i in range(count)))
 
 
 def assert_file_put(fs, address):
-    directory = os.path.dirname(address.relpath)
-    dir_parts = [part for part in directory.split(os.path.sep) if part]
+    directory = os.path.dirname(address.abspath)
+    reldirectory = str(directory).split(str(fs.root))[-1]
+    dir_parts = [part for part in reldirectory.split(os.path.sep) if part]
 
     assert address.abspath in tuple(py.path.local(fs.root).visit())
-    assert fs.exists(address.id)
+    assert fs.exists(address.digest)
 
-    id = os.path.splitext(address.relpath.replace(os.path.sep, ''))[0]
-    assert id == address.id
+    digest = str(address.abspath).split(os.path.sep)[-1]
+    assert digest == address.digest
 
     assert len(dir_parts) == fs.depth
     assert all(len(part) == fs.width for part in dir_parts)
+    # assert len(list(fs.files())) == 1
 
 
-def test_hashfs_put_stringio(fs, stringio):
-    address = fs.put(stringio)
+def test_uhashfs_put_fileobj_from_inside_root(fs, fileio_fsroot):
+    with pytest.raises(ValueError):
+        fs.putfile(fileio_fsroot)
 
+
+def test_uhashfs_put_fileobj_from_outside_fsroot(fs, fileio_outside_fsroot):
+    address = fs.putfile(fileio_outside_fsroot)
     assert_file_put(fs, address)
-
     with open(address.abspath, 'rb') as fileobj:
-        assert fileobj.read() == to_bytes(stringio.getvalue())
+        assert fileobj.read() == fileio_outside_fsroot.read()
+    assert len(list(fs.files())) == 1
 
 
-def test_hashfs_put_fileobj(fs, fileio):
-    address = fs.put(fileio)
+def test_uhashfs_put_file_from_inside_fsroot(fs, filepath_fsroot):
+    with pytest.raises(ValueError):
+        fs.putfile(str(filepath_fsroot))
 
+
+def test_uhashfs_put_file_from_outside_fsroot(fs, filepath_outside_fsroot):
+    address = fs.putfile(str(filepath_outside_fsroot))
     assert_file_put(fs, address)
-
     with open(address.abspath, 'rb') as fileobj:
-        assert fileobj.read() == fileio.read()
+        assert fileobj.read() == bytes(filepath_outside_fsroot.read(), 'UTF8')
+    assert len(list(fs.files())) == 1
 
 
-def test_hashfs_put_file(fs, filepath):
-    address = fs.put(str(filepath))
-
-    assert_file_put(fs, address)
-
-    with open(address.abspath, 'rb') as fileobj:
-        assert fileobj.read() == to_bytes(filepath.read())
-
-
-def test_hashfs_put_duplicate(fs, stringio):
-    address_a = fs.put(stringio)
-    address_b = fs.put(stringio)
+def test_uhashfs_put_duplicate(fs, unicodestring):
+    address_a = fs.putstr(unicodestring)
+    address_b = fs.putstr(unicodestring)
 
     assert not address_a.is_duplicate
     assert address_b.is_duplicate
+    assert len(list(fs.files())) == 1
 
 
-@pytest.mark.parametrize('extension', [
-    'txt',
-    '.txt',
-    'md',
-    '.md'
-])
-def test_hashfs_put_extension(fs, stringio, extension):
-    address = fs.put(stringio, extension)
-
+def test_uhashfs_putstr(fs):
+    address = fs.putstr('foo')
     assert_file_put(fs, address)
-    assert os.path.sep in address.abspath
-    assert os.path.splitext(address.abspath)[1].endswith(extension)
+    with open(address.abspath, 'rb') as fileobj:
+        assert fileobj.read() == bytes('foo', 'UTF8')
+    assert len(list(fs.files())) == 1
+
+
+def test_uhashfs_putstr_bytes(fs):
+    address = fs.putstr(b'bar')
+    assert_file_put(fs, address)
+    with open(address.abspath, 'rb') as fileobj:
+        assert fileobj.read() == bytes('bar', 'UTF8')
+
+    address = fs.putstr(b'barfoo')
+    assert_file_put(fs, address)
+    with open(address.abspath, 'rb') as fileobj:
+        assert fileobj.read() == bytes('barfoo', 'UTF8')
+
+    assert len(list(fs.files())) == 2
+
+
+def test_uhashfs_putstr_bytes_all(fs, all_bytes):
+    for onebyte in all_bytes:
+        address = fs.putstr(onebyte)
+        assert_file_put(fs, address)
+        with open(address.abspath, 'rb') as fileobj:
+            assert fileobj.read() == onebyte
+
+    assert len(list(fs.files())) == 256
+
+
+def test_uhashfs_putstr_foo(fs):
+    address = fs.putstr('foo')
+    assert \
+        address.digest == \
+        '2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae'
+    assert len(list(fs.files())) == 1
+
+
+def test_uhashfs_putstr_empty(fs):
+    address = fs.putstr('')
+    assert \
+        address.digest == \
+        'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+    assert len(list(fs.files())) == 1
+
+
+def test_uhashfs_address(fs, unicodestring):
+    address = fs.putstr(unicodestring)
+
+    assert str(fs.root) in address.abspath
+    assert address.abspath.split(os.path.sep)[-1] == address.digest
     assert not address.is_duplicate
+    assert len(list(fs.files())) == 1
 
 
-def test_hashfs_put_error(fs):
-    with pytest.raises(ValueError):
-        fs.put('foo')
-
-
-def test_hashfs_address(fs, stringio):
-    address = fs.put(stringio)
-
-    assert fs.root not in address.relpath
-    assert os.path.join(fs.root, address.relpath) == address.abspath
-    assert address.relpath.replace(os.sep, '') == address.id
-    assert not address.is_duplicate
-
-
-@pytest.mark.parametrize('extension,address_attr', [
-    ('', 'id'),
-    ('.txt', 'id'),
-    ('txt', 'id'),
-    ('', 'abspath'),
-    ('.txt', 'abspath'),
-    ('txt', 'abspath'),
+@pytest.mark.parametrize('address_attr', [
+    ('digest'),
+    ('digest'),
+    ('digest'),
 ])
-def test_hashfs_open(fs, stringio, extension, address_attr):
-    address = fs.put(stringio, extension)
+def test_uhashfs_open(fs, unicodestring, address_attr):
+    address = fs.putstr(unicodestring)
 
     fileobj = fs.open(getattr(address, address_attr))
 
     assert isinstance(fileobj, BufferedReader)
-    assert fileobj.read() == to_bytes(stringio.getvalue())
+    assert fileobj.read() == bytes(unicodestring, 'UTF8')
 
     fileobj.close()
+    assert len(list(fs.files())) == 1
 
 
-def test_hashfs_open_error(fs):
-    with pytest.raises(IOError):
+def test_uhashfs_open_error(fs):
+    with pytest.raises(ValueError):
         fs.open('invalid')
+    assert len(list(fs.files())) == 0
 
 
-def test_hashfs_exists(fs, stringio):
-    address = fs.put(stringio)
-
-    assert fs.exists(address.id)
-    assert fs.exists(address.relpath)
-    assert fs.exists(address.abspath)
+def test_uhashfs_exists(fs, unicodestring):
+    address = fs.putstr(unicodestring)
+    assert fs.exists(address.digest)
+    assert len(list(fs.files())) == 1
 
 
-def test_hashfs_contains(fs, stringio):
-    address = fs.put(stringio)
-
-    assert address.id in fs
-    assert address.relpath in fs
-    assert address.abspath in fs
+def test_uhashfs_contains(fs, unicodestring):
+    address = fs.putstr(unicodestring)
+    assert address.digest in fs
+    assert len(list(fs.files())) == 1
 
 
-def test_hashfs_get(fs, stringio):
-    address = fs.put(stringio)
+def test_uhashfssh1_contains(fssha1, unicodestring):
+    address = fssha1.putstr(unicodestring)
+    assert fssha1.algorithm == 'sha1'
+    assert address.digest in fssha1
+    assert len(list(fssha1.files())) == 1
+
+
+def test_uhashfs_relative(fs_relative):
+    assert os.path.sep in str(fs_relative.root)
+    assert str(fs_relative.root).startswith(os.path.sep)
+    assert len(list(fs_relative.files())) == 0
+
+
+def test_uhashfs_relative_putstr(fs_relative, unicodestring):
+    fs_relative.putstr(unicodestring)
+    assert os.path.sep in str(fs_relative.root)
+    assert str(fs_relative.root).startswith(os.path.sep)
+    assert len(list(fs_relative.files())) == 1
+
+
+def test_uhashfs_get(fs, unicodestring):
+    address = fs.putstr(unicodestring)
 
     assert not address.is_duplicate
-    assert fs.get(address.id) == address
-    assert fs.get(address.relpath) == address
-    assert fs.get(address.abspath) == address
-    assert fs.get('invalid') is None
+    assert fs.get(address.digest) == address
+    with pytest.raises(ValueError):
+        fs.get('invalid')
+
+    with pytest.raises(ValueError):
+        fs.get('0' * (fs.digestlen + 1))
+    with pytest.raises(ValueError):
+        fs.get('0' * (fs.digestlen - 1))
+    with pytest.raises(FileNotFoundError):
+        fs.get('0' * fs.digestlen)
+    assert len(list(fs.files())) == 1
 
 
 @pytest.mark.parametrize('address_attr', [
-    'id',
-    'abspath',
+    'digest',
 ])
-def test_hashfs_delete(fs, stringio, address_attr):
-    address = fs.put(stringio)
+def test_uhashfs_delete(fs, unicodestring, address_attr):
+    address = fs.putstr(unicodestring)
 
     fs.delete(getattr(address, address_attr))
-    assert len(os.listdir(fs.root)) == 0
+    assert len(os.listdir(fs.root)) == 1
 
 
-def test_hashfs_delete_error(fs):
-    fs.delete('invalid')
-
-
-def test_hashfs_remove_empty(fs):
-    subpath1 = os.path.join(fs.root, '1', '2', '3')
-    subpath2 = os.path.join(fs.root, '1', '4', '5')
-    subpath3 = os.path.join(fs.root, '6', '7', '8')
-
-    fs.makepath(subpath1)
-    fs.makepath(subpath2)
-    fs.makepath(subpath3)
-
-    assert os.path.exists(subpath1)
-    assert os.path.exists(subpath2)
-    assert os.path.exists(subpath3)
-
-    fs.remove_empty(subpath1)
-    fs.remove_empty(subpath3)
-
-    assert not os.path.exists(subpath1)
-    assert os.path.exists(subpath2)
-    assert not os.path.exists(subpath3)
-
-
-def test_hashfs_remove_empty_subdir(fs):
-    fs.remove_empty(fs.root)
-
-    assert os.path.exists(fs.root)
-
-    fs.remove_empty(os.path.realpath(os.path.join(fs.root, '..')))
-
-    assert os.path.exists(fs.root)
-
-
-def test_hashfs_unshard(fs, stringio):
-    address = fs.put(stringio)
-    assert fs.unshard(address.abspath) == address.id
-
-
-def test_hashfs_unshard_error(fs):
+def test_uhashfs_delete_error(fs):
     with pytest.raises(ValueError):
-        fs.unshard('invalid')
+        fs.delete('invalid')
+    with pytest.raises(ValueError):
+        fs.delete('0' * (fs.digestlen + 1))
+    with pytest.raises(ValueError):
+        fs.delete('0' * (fs.digestlen - 1))
+    with pytest.raises(FileNotFoundError):
+        fs.delete('0' * fs.digestlen)
+    with pytest.raises(ValueError):
+        fs.delete(('0' * (fs.digestlen - 1)) + 'z')
+    assert len(list(fs.files())) == 0
 
 
-def test_hashfs_repair(fs, stringio):
-    original_address = fs.put(stringio)
-    newfs = hashfs.HashFS(fs.root, depth=1)
-
-    repaired = newfs.repair()
-
-    assert len(repaired) == 1
-    original_path, address = repaired[0]
-
-    assert original_path == original_address.abspath
-    assert not os.path.isfile(original_path)
-    assert_file_put(newfs, address)
+def test_uhashfs_unshard(fs, unicodestring):
+    address = fs.putstr(unicodestring)
+    assert unshard(address.abspath) == address.digest
+    assert len(list(fs.files())) == 1
 
 
-def test_hashfs_repair_duplicates(fs, stringio):
-    original_address = fs.put(stringio)
-    newfs = hashfs.HashFS(fs.root, depth=1)
-    newfs.put(stringio)
-
-    repaired = newfs.repair()
-
-    assert len(repaired) == 1
-    original_path, address = repaired[0]
-
-    assert original_path == original_address.abspath
-    assert not os.path.isfile(original_path)
-    assert_file_put(newfs, address)
+def test_uhashfs_unshard_error(fs):
+    with pytest.raises(ValueError):
+        unshard('invalid')
+    assert len(list(fs.files())) == 0
 
 
-def test_hashfs_files(fs):
+def test_uhashfs_digestpath(fs):
+    assert fs.digestpath('0' * fs.digestlen) == str(fs.root) + os.path.sep + \
+        os.path.sep.join(list('0' * fs.depth)) + os.path.sep + \
+        ('0' * fs.digestlen)
+    with pytest.raises(ValueError):
+        fs.digestpath('invalid')
+    with pytest.raises(ValueError):
+        fs.digestpath('0' * (fs.digestlen + 1))
+    with pytest.raises(ValueError):
+        fs.digestpath('0' * (fs.digestlen - 1))
+    with pytest.raises(ValueError):
+        fs.digestpath(('0' * (fs.digestlen - 1)) + 'z')
+    assert len(list(fs.files())) == 0
+
+
+def test_uhashfs_files(fs):
     count = 5
-    addresses = put_range(fs, count)
+    addresses = putstr_range(fs, count)
     files = list(fs.files())
 
     assert len(files) == count
@@ -279,12 +343,13 @@ def test_hashfs_files(fs):
         assert os.path.isfile(file)
         assert file in addresses
         assert addresses[file].abspath == file
-        assert addresses[file].id == fs.unshard(file)
+        assert addresses[file].digest == unshard(file)
+    assert len(list(fs.files())) == count
 
 
-def test_hashfs_iter(fs):
+def test_uhashfs_iter(fs):
     count = 5
-    addresses = put_range(fs, count)
+    addresses = putstr_range(fs, count)
     test_count = 0
 
     for file in fs:
@@ -292,38 +357,22 @@ def test_hashfs_iter(fs):
         assert os.path.isfile(file)
         assert file in addresses
         assert addresses[file].abspath == file
-        assert addresses[file].id == fs.unshard(file)
+        assert addresses[file].digest == unshard(file)
 
     assert test_count == count
+    assert len(list(fs.files())) == count
 
 
-def test_hashfs_count(fs):
+def test_uhashfs_corrupted(fs, unicodestring):
+    address = fs.putstr(unicodestring)
+    with open(address.abspath, 'ab') as fh:
+        fh.write(b'f')
+    assert len(list(fs.corrupted())) == 1
+
+
+def test_uhashfs_correct_file_count(fs):
+    """len() and count() are deliberately not implemented
+    because they could take "forever" to return."""
     count = 5
-    put_range(fs, count)
-    assert fs.count() == count
-
-
-def test_hashfs_len(fs):
-    count = 5
-    put_range(fs, count)
-    assert len(fs) == count
-
-
-def test_hashfs_folders(fs):
-    count = 5
-    put_range(fs, count)
-    folders = list(fs.folders())
-
-    assert len(folders) == count
-
-    for folder in folders:
-        assert os.path.exists(folder)
-        assert os.path.isfile(os.path.join(folder, os.listdir(folder)[0]))
-
-
-def test_hashfs_size(fs):
-    fs.put(StringIO(u'{0}'.format(string.ascii_lowercase)))
-    fs.put(StringIO(u'{0}'.format(string.ascii_uppercase)))
-    expected = len(string.ascii_lowercase) + len(string.ascii_uppercase)
-
-    assert fs.size() == expected
+    putstr_range(fs, count)
+    assert len(list(fs.files())) == count

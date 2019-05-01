@@ -3,12 +3,12 @@
 ##
 
 ENV_NAME = env
-ENV_ACT = . env/bin/activate;
+#ENV_ACT = . env/bin/activate;
 PIP = $(ENV_NAME)/bin/pip
 PYTEST_ARGS = --doctest-modules -v -s
-PYTEST_TARGET = hashfs tests
+PYTEST_TARGET = uhashfs tests
 COVERAGE_ARGS = --cov-config setup.cfg --cov-report term-missing --cov
-COVERAGE_TARGET = hashfs
+COVERAGE_TARGET = uhashfs
 
 
 ##
@@ -73,31 +73,3 @@ release:
 	$(ENV_ACT) python setup.py sdist bdist_wheel
 	$(ENV_ACT) twine upload dist/*
 	rm -rf dist *.egg* build
-
-.PHONY: docs
-docs:
-	touch docs/_build
-	rm -r docs/_build
-	$(ENV_ACT) cd docs; make doctest
-	$(ENV_ACT) cd docs; make html
-
-.PHONY: serve-docs
-serve-docs:
-	cd docs/_build/html; python2 -m SimpleHTTPServer 8000
-
-.PHONY: reload-docs
-reload-docs: docs serve-docs
-
-
-##
-# TravisCI
-##
-
-.PHONY: travisci-install
-travisci-install:
-	pip install -r requirements.txt
-
-.PHONY: travisci-test
-travisci-test:
-	flake8 $(PYTEST_TARGET)
-	pytest $(PYTEST_ARGS) $(COVERAGE_ARGS) $(COVERAGE_TARGET) $(PYTEST_TARGET)
