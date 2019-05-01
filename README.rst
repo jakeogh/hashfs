@@ -148,8 +148,6 @@ Iterate over files that do not hash to their name.
 Walking All Files
 -----------------
 
-Iterate over files.
-
 .. code-block:: python
 
     for file in fs.files():
