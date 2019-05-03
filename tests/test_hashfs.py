@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 
+import time
 from io import BufferedReader
 import os
-import string
 import py
 import pytest
-import time
 from uhashfs import uHashFS, unshard
 
 TIMESTAMP = str(time.time())
@@ -107,13 +106,13 @@ def assert_file_put(fs, address):
     dir_parts = [part for part in reldirectory.split(os.path.sep) if part]
 
     assert address.abspath in tuple(py.path.local(fs.root).visit())
-    assert fs.exists(address.digest)
+    assert fs.existshexdigest(address.hexdigest)
 
-    digest = str(address.abspath).split(os.path.sep)[-1]
-    assert digest == address.digest
+    hexdigest = str(address.abspath).split(os.path.sep)[-1]
+    assert hexdigest == address.hexdigest
 
-    assert len(dir_parts) == fs.depth
-    assert all(len(part) == fs.width for part in dir_parts)
+    assert (len(dir_parts) - 1) == fs.depth
+    assert all(len(part) == fs.width for part in dir_parts[1:])
     # assert len(list(fs.files())) == 1
 
 
@@ -187,16 +186,18 @@ def test_uhashfs_putstr_bytes_all(fs, all_bytes):
 def test_uhashfs_putstr_foo(fs):
     address = fs.putstr('foo')
     assert \
-        address.digest == \
-        '2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae'
+        address.hexdigest == \
+        '76d3bc41c9f588f7fcd0d5bf4718f8f84b1c41b20882703100b9eb9413807c01' # sha3_256
+    #'2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae' # sha256
     assert len(list(fs.files())) == 1
 
 
 def test_uhashfs_putstr_empty(fs):
     address = fs.putstr('')
     assert \
-        address.digest == \
-        'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+        address.hexdigest == \
+        'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a' # sha3_256
+    #'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' # sha256
     assert len(list(fs.files())) == 1
 
 
@@ -204,20 +205,20 @@ def test_uhashfs_address(fs, unicodestring):
     address = fs.putstr(unicodestring)
 
     assert str(fs.root) in address.abspath
-    assert address.abspath.split(os.path.sep)[-1] == address.digest
+    assert address.abspath.split(os.path.sep)[-1] == address.hexdigest
     assert not address.is_duplicate
     assert len(list(fs.files())) == 1
 
 
 @pytest.mark.parametrize('address_attr', [
-    ('digest'),
-    ('digest'),
-    ('digest'),
+    ('hexdigest'),
+    ('hexdigest'),
+    ('hexdigest'),
 ])
-def test_uhashfs_open(fs, unicodestring, address_attr):
+def test_uhashfs_openhexdigest(fs, unicodestring, address_attr):
     address = fs.putstr(unicodestring)
 
-    fileobj = fs.open(getattr(address, address_attr))
+    fileobj = fs.openhexdigest(getattr(address, address_attr))
 
     assert isinstance(fileobj, BufferedReader)
     assert fileobj.read() == bytes(unicodestring, 'UTF8')
@@ -226,28 +227,28 @@ def test_uhashfs_open(fs, unicodestring, address_attr):
     assert len(list(fs.files())) == 1
 
 
-def test_uhashfs_open_error(fs):
+def test_uhashfs_openhexdigest_error(fs):
     with pytest.raises(ValueError):
-        fs.open('invalid')
+        fs.openhexdigest('invalid')
     assert len(list(fs.files())) == 0
 
 
-def test_uhashfs_exists(fs, unicodestring):
+def test_uhashfs_existshexdigest(fs, unicodestring):
     address = fs.putstr(unicodestring)
-    assert fs.exists(address.digest)
+    assert fs.existshexdigest(address.hexdigest)
     assert len(list(fs.files())) == 1
 
 
 def test_uhashfs_contains(fs, unicodestring):
     address = fs.putstr(unicodestring)
-    assert address.digest in fs
+    assert address.hexdigest in fs
     assert len(list(fs.files())) == 1
 
 
 def test_uhashfssh1_contains(fssha1, unicodestring):
     address = fssha1.putstr(unicodestring)
     assert fssha1.algorithm == 'sha1'
-    assert address.digest in fssha1
+    assert address.hexdigest in fssha1
     assert len(list(fssha1.files())) == 1
 
 
@@ -264,50 +265,50 @@ def test_uhashfs_relative_putstr(fs_relative, unicodestring):
     assert len(list(fs_relative.files())) == 1
 
 
-def test_uhashfs_get(fs, unicodestring):
+def test_uhashfs_gethexdigest(fs, unicodestring):
     address = fs.putstr(unicodestring)
 
     assert not address.is_duplicate
-    assert fs.get(address.digest) == address
+    assert fs.gethexdigest(address.hexdigest) == address
     with pytest.raises(ValueError):
-        fs.get('invalid')
+        fs.gethexdigest('invalid')
 
     with pytest.raises(ValueError):
-        fs.get('0' * (fs.digestlen + 1))
+        fs.gethexdigest('0' * (fs.hexdigestlen + 1))
     with pytest.raises(ValueError):
-        fs.get('0' * (fs.digestlen - 1))
+        fs.gethexdigest('0' * (fs.hexdigestlen - 1))
     with pytest.raises(FileNotFoundError):
-        fs.get('0' * fs.digestlen)
+        fs.gethexdigest('0' * fs.hexdigestlen)
     assert len(list(fs.files())) == 1
 
 
 @pytest.mark.parametrize('address_attr', [
-    'digest',
+    'hexdigest',
 ])
-def test_uhashfs_delete(fs, unicodestring, address_attr):
+def test_uhashfs_deletehexdigest(fs, unicodestring, address_attr):
     address = fs.putstr(unicodestring)
 
-    fs.delete(getattr(address, address_attr))
+    fs.deletehexdigest(getattr(address, address_attr))
     assert len(os.listdir(fs.root)) == 1
 
 
-def test_uhashfs_delete_error(fs):
+def test_uhashfs_deletehexdigest_error(fs):
     with pytest.raises(ValueError):
-        fs.delete('invalid')
+        fs.deletehexdigest('invalid')
     with pytest.raises(ValueError):
-        fs.delete('0' * (fs.digestlen + 1))
+        fs.deletehexdigest('0' * (fs.hexdigestlen + 1))
     with pytest.raises(ValueError):
-        fs.delete('0' * (fs.digestlen - 1))
+        fs.deletehexdigest('0' * (fs.hexdigestlen - 1))
     with pytest.raises(FileNotFoundError):
-        fs.delete('0' * fs.digestlen)
+        fs.deletehexdigest('0' * fs.hexdigestlen)
     with pytest.raises(ValueError):
-        fs.delete(('0' * (fs.digestlen - 1)) + 'z')
+        fs.deletehexdigest(('0' * (fs.hexdigestlen - 1)) + 'z')
     assert len(list(fs.files())) == 0
 
 
 def test_uhashfs_unshard(fs, unicodestring):
     address = fs.putstr(unicodestring)
-    assert unshard(address.abspath) == address.digest
+    assert unshard(address.abspath) == address.hexdigest
     assert len(list(fs.files())) == 1
 
 
@@ -317,18 +318,21 @@ def test_uhashfs_unshard_error(fs):
     assert len(list(fs.files())) == 0
 
 
-def test_uhashfs_digestpath(fs):
-    assert fs.digestpath('0' * fs.digestlen) == str(fs.root) + os.path.sep + \
+def test_uhashfs_hexdigestpath(fs):
+    assert fs.hexdigestpath('0' * fs.hexdigestlen) == str(fs.root) + \
+        os.path.sep + \
+        fs.algorithm + \
+        os.path.sep + \
         os.path.sep.join(list('0' * fs.depth)) + os.path.sep + \
-        ('0' * fs.digestlen)
+        ('0' * fs.hexdigestlen)
     with pytest.raises(ValueError):
-        fs.digestpath('invalid')
+        fs.hexdigestpath('invalid')
     with pytest.raises(ValueError):
-        fs.digestpath('0' * (fs.digestlen + 1))
+        fs.hexdigestpath('0' * (fs.hexdigestlen + 1))
     with pytest.raises(ValueError):
-        fs.digestpath('0' * (fs.digestlen - 1))
+        fs.hexdigestpath('0' * (fs.hexdigestlen - 1))
     with pytest.raises(ValueError):
-        fs.digestpath(('0' * (fs.digestlen - 1)) + 'z')
+        fs.hexdigestpath(('0' * (fs.hexdigestlen - 1)) + 'z')
     assert len(list(fs.files())) == 0
 
 
@@ -343,7 +347,7 @@ def test_uhashfs_files(fs):
         assert os.path.isfile(file)
         assert file in addresses
         assert addresses[file].abspath == file
-        assert addresses[file].digest == unshard(file)
+        assert addresses[file].hexdigest == unshard(file)
     assert len(list(fs.files())) == count
 
 
@@ -357,7 +361,7 @@ def test_uhashfs_iter(fs):
         assert os.path.isfile(file)
         assert file in addresses
         assert addresses[file].abspath == file
-        assert addresses[file].digest == unshard(file)
+        assert addresses[file].hexdigest == unshard(file)
 
     assert test_count == count
     assert len(list(fs.files())) == count

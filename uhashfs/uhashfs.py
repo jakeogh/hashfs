@@ -5,7 +5,10 @@ import hashlib
 import io
 import os
 import sys
+import time
 from tempfile import NamedTemporaryFile
+import binascii
+import redis
 import attr
 
 
@@ -33,7 +36,7 @@ def hash_readable(handle, algorithm, tmp):
             tmp.write(chunk)
     if tmp:
         tmp.close()
-    return hasher.hexdigest()
+    return hasher.digest()
 
 
 def hash_file(path, algorithm, tmp):
@@ -50,6 +53,8 @@ def hash_file_handle(handle, algorithm, tmp):
 
 
 def path_is_parent(parent, child):
+    #print("parent:", parent.__repr__())
+    #print("child:", child.__repr__())
     parent = parent.expanduser().resolve()
     child = child.expanduser().resolve()
     return os.path.commonpath([parent]) == os.path.commonpath([parent, child])
@@ -80,18 +85,27 @@ class uHashFS():
     root: str = attr.ib(converter=Path)
     tmproot: str = attr.ib(converter=Path)
     #tmproot: str = attr.ib(converter=Path, default=root)
-    depth: int = 3
+    depth: int = 4
     width: int = 1
-    algorithm: str = 'sha256'
-    fmode: int = 0o664
+    algorithm: str = 'sha3_256'
+    fmode: int = 0o444
     dmode: int = 0o755
+    verbose: bool = False
+    redis: bool = False
 
     def __attrs_post_init__(self):
         self.root = self.root.resolve()
-        self.digestlen = hashlib.new(self.algorithm).digest_size * 2
-        self.emptydigest = getattr(hashlib, self.algorithm)(b'').hexdigest()
+        self.digestlen = hashlib.new(self.algorithm).digest_size
+        self.hexdigestlen = self.digestlen * 2
+        self.emptydigest = getattr(hashlib, self.algorithm)(b'').digest()
+        self.emptyhexdigest = self.emptydigest.hex()
+        if self.redis:
+            self.redis = redis.StrictRedis(host='127.0.0.1')
+            self.rediskey = ':'.join(["uhashfs", str(self.root), self.algorithm]) + '#'
+            print("self.rediskey:", self.rediskey)
         assert len(self.emptydigest) == self.digestlen
-        assert self.depth > 0
+        assert len(self.emptyhexdigest) == self.hexdigestlen
+        assert self.depth > 0  # depth in theory could be zero, but then why use this?
         assert self.width > 0
 
     def _mktemp(self):
@@ -110,14 +124,14 @@ class uHashFS():
 
         if self.fmode is not None:
             oldmask = os.umask(0)
-            try:
-                os.chmod(tmp.name, self.fmode)
-            finally:
-                os.umask(oldmask)
+            #try:  # why try?
+            os.chmod(tmp.name, self.fmode)
+            #finally:
+            os.umask(oldmask)
 
         return tmp
 
-    def _mvtemp(self, tmp, filepath):
+    def _mvtemp(self, tmp, filepath, ts=False):
         """Move file (even if empty) to filepath on same filesystem.
 
         Args:
@@ -129,7 +143,10 @@ class uHashFS():
         """
         # if filepath does not exist, rename now
         try:
-            os.link(tmp, filepath)
+            os.link(tmp, filepath, follow_symlinks=False)
+            if ts:
+                print(ts)
+                os.utime(filepath, ns=ts, follow_symlinks=False)
         except FileExistsError:
             os.unlink(tmp)
             return True
@@ -157,7 +174,10 @@ class uHashFS():
             # pylint: enable=W0101
         except FileNotFoundError:
             os.makedirs(os.path.dirname(filepath), self.dmode)
-            os.link(tmp, filepath)
+            os.link(tmp, filepath, follow_symlinks=False)
+            if ts:
+                print("made dir", ts)
+                os.utime(filepath, ns=ts, follow_symlinks=False)
 
         os.unlink(tmp)  # only if link() didnt throw exception
         return False  # file did not already exist
@@ -176,19 +196,11 @@ class uHashFS():
             string = io.StringIO(string)
         except TypeError:
             string = io.BytesIO(string)
+        return self.putstream(string)
 
-        tmp = self._mktemp()
-        digest = self.computehash(string, tmp)
-        filepath = self.digestpath(digest)
-        # could use SpooledTemporaryFile to save disk hits
-        # or hash without a temp file
-        is_duplicate = self._mvtemp(tmp.name, filepath)
-
-        return HashAddress(digest, self, filepath, is_duplicate)
-
-    def putrequest(self, request):
-        """Store contents of `requests.model.Request` on disk using its
-        content hash for the address.
+    def putstream(self, request, progress=False):
+        """Store contents of `requests.model.Request` or any object with a
+        .read() method on disk using its content hash for the address.
 
         Args:
             stream (requests.model.Request): Readable object or path to file.
@@ -197,42 +209,58 @@ class uHashFS():
             HashAddress: File's hash address.
         """
         tmp = self._mktemp()
-        digest = self.computehash(request, tmp)
-        filepath = self.digestpath(digest)
-        is_duplicate = self._mvtemp(tmp.name, filepath)
+        digest = self.computehash(request, tmp, progress=progress)
+        return self._commit(digest=digest, tmp=tmp)
 
-        return HashAddress(digest, self, filepath, is_duplicate)
-
-    def putfile(self, file):
+    def putfile(self, infile, ts=True):
         """Store contents of `file` on disk using its content hash for the
         address.
 
         Args:
-            file (mixed): Readable object or path to file.
+            infile (mixed): Readable object or path to file.
 
         Returns:
             HashAddress: File's hash address.
         """
-        if hasattr(file, 'name'):
-            name = Path(file.name)
-        else:
-            name = Path(file)
-        if path_is_parent(self.root, name):
+        if ts:
+            infile_stat = os.stat(infile)
+            ts = (infile_stat.st_atime_ns, infile_stat.st_mtime_ns)
+            assert isinstance(ts, tuple)
+            assert len(ts) == 2
+        if not isinstance(infile, Path):
+            infile = Path(infile)
+        if path_is_parent(self.root, infile):
             raise ValueError("Error: {0} exists within the hashfs"
-                             "root: {1}".format(name, self.root))
-
+                             "root: {1}".format(str(infile.__repr__()), self.root))  # cant just print Path's
         tmp = self._mktemp()
         try:
-            digest = hash_file(file, self.algorithm, tmp)
+            digest = hash_file(infile, self.algorithm, tmp)
         except TypeError:
-            digest = hash_file_handle(file, self.algorithm, tmp)
+            digest = hash_file_handle(infile, self.algorithm, tmp)
+        return self._commit(digest=digest, tmp=tmp, ts=ts)
 
+    def _commit(self, digest, tmp, ts=False):
+        #print("digest:", digest)
+        assert isinstance(digest, bytes)
+        #hexdigest = digest.hex()
         filepath = self.digestpath(digest)
-        is_duplicate = self._mvtemp(tmp.name, filepath)
-
+        is_duplicate = self._mvtemp(tmp.name, filepath, ts)
+        if self.redis:
+            if ts:
+                timestamp = ts[0]
+            else:
+                timestamp = time.time()
+            self.redis.zadd(name=self.rediskey, mapping={digest:timestamp})
         return HashAddress(digest, self, filepath, is_duplicate)
 
-    def get(self, digest):
+    def gethexdigest(self, hexdigest):
+        realpath = self.hexdigestpath(hexdigest)
+        if os.path.isfile(realpath):
+            digest = binascii.unhexlify(hexdigest)
+            return HashAddress(digest, self, realpath)  # todo
+        raise FileNotFoundError
+
+    def getdigest(self, digest):
         """Return :class:`HashAdress` from given id. If `id` does not
         refer to a valid file, then ``None`` is returned.
 
@@ -250,7 +278,11 @@ class uHashFS():
             return HashAddress(digest, self, realpath)  # todo
         raise FileNotFoundError
 
-    def open(self, digest, mode='rb'):
+    def opendigest(self, digest, mode='rb'):
+        hexdigest = binascii.unhexlify(digest)
+        return self.openhexdigest(hexdigest)
+
+    def openhexdigest(self, hexdigest, mode='rb'):
         """Return open buffer object from given id.
 
         Args:
@@ -263,10 +295,15 @@ class uHashFS():
         Raises:
             FileNotFoundError: If file doesn't exist.
         """
-        realpath = self.digestpath(digest)
+        realpath = self.hexdigestpath(hexdigest)
         return io.open(realpath, mode)
 
-    def delete(self, digest):
+    def deletedigest(self, digest):
+        assert isinstance(digest, bytes)
+        hexdigest = binascii.unhexlify(digest)
+        return self.deletehexdigest(hexdigest)
+
+    def deletehexdigest(self, hexdigest):
         """Delete file using id.
 
         Args:
@@ -278,7 +315,7 @@ class uHashFS():
         Raises:
             FileNotFoundError: If file doesn't exist.
         """
-        realpath = self.digestpath(digest)
+        realpath = self.hexdigestpath(hexdigest)
         assert realpath.startswith(str(self.root))
         os.remove(realpath)
         return True
@@ -288,14 +325,24 @@ class uHashFS():
         directory.
         """
         for folder, _, files in os.walk(self.root):
-            for file in files:
-                yield os.path.abspath(os.path.join(folder, file))
+            for afile in files:
+                yield os.path.abspath(os.path.join(folder, afile))
 
-    def exists(self, digest):
+    def existsdigest(self, digest):
         """Check whether a given file digest exists on disk."""
-        return os.path.isfile(self.digestpath(digest))
+        hexdigest = binascii.unhexlify(digest)
+        return self.existshexdigest(hexdigest)
+
+    def existshexdigest(self, hexdigest):
+        """Check whether a given file digest exists on disk."""
+        return os.path.isfile(self.hexdigestpath(hexdigest))
 
     def digestpath(self, digest):
+        assert isinstance(digest, bytes)  # todo test
+        hexdigest = digest.hex()
+        return self.hexdigestpath(hexdigest)
+
+    def hexdigestpath(self, hexdigest):
         """Build the file path for a given hash id.
 
         Args:
@@ -307,19 +354,18 @@ class uHashFS():
         Raises:
             ValueError: If the ID is the wrong length or not hex.
         """
-        if len(digest) != self.digestlen:
+        if len(hexdigest) != self.hexdigestlen:
             raise ValueError('Invalid ID: "{0}" is not {1} digits '
-                             'long'.format(digest, self.digestlen))
+                             'long'.format(hexdigest, self.hexdigestlen))
         try:
-            int(digest, 16)
+            int(hexdigest, 16)
         except ValueError:
             raise ValueError('Invalid ID: "{0}" '
-                             'is not hex'.format(digest))
-        paths = self.shard(digest)
-        return os.path.join(self.root, *paths)
+                             'is not hex'.format(hexdigest))
+        paths = self.shard(hexdigest)
+        return os.path.join(self.root, self.algorithm, *paths)
 
     def _print_status(self, name, current_size, expected_size, end):
-        return
         if expected_size:
             print(str(int((current_size / expected_size) * 100)) + '%',
                   current_size, name, end='\r',
@@ -330,7 +376,7 @@ class uHashFS():
         if end:
             print("", file=sys.stderr)
 
-    def computehash(self, stream, tmp):
+    def computehash(self, stream, tmp, progress=False):
         """Compute hash of file using :attr:`algorithm`."""
         hashobj = hashlib.new(self.algorithm)
         #print("type(sream):", type(stream))
@@ -346,17 +392,19 @@ class uHashFS():
             if tmp:
                 tmp.write(chunk)
                 file_size = int(os.path.getsize(tmp.name))
-                self._print_status(name=tmp.name,
-                                   current_size=file_size,
-                                   expected_size=header_size, end=False)
+                if progress:
+                    self._print_status(name=tmp.name,
+                                       current_size=file_size,
+                                       expected_size=header_size, end=False)
         if tmp:
             tmp.close()
             file_size = int(os.path.getsize(tmp.name))
-            self._print_status(name=tmp.name,
-                               current_size=file_size,
-                               expected_size=header_size, end=True)
+            if progress:
+                self._print_status(name=tmp.name,
+                                   current_size=file_size,
+                                   expected_size=header_size, end=True)
 
-        return hashobj.hexdigest()
+        return hashobj.digest()
 
     def shard(self, digest):
         """Creates a list of `depth` number of tokens with width
@@ -371,16 +419,18 @@ class uHashFS():
         """
         for path in self.files():
             digest = hash_file(path, self.algorithm, tmp=None)
-            assert len(digest) == len(path.split(os.path.sep)[-1])
-            expected_path = self.digestpath(digest)
+            hexdigest = digest.hex()
+            assert len(hexdigest) == len(path.split(os.path.sep)[-1])
+            expected_path = self.hexdigestpath(hexdigest)
             if expected_path != path:
                 yield (path, HashAddress(digest, self, expected_path))
 
-    def __contains__(self, digest):
+    def __contains__(self, hexdigest):
         """Return whether a given digest is contained in the :attr:`root`
-        directory.
+        directory. UGLY. Need generics. Or delete method.
         """
-        return self.exists(digest)
+
+        return self.existshexdigest(hexdigest)
 
     def __iter__(self):
         """Iterate over all files in the :attr:`root` directory."""
@@ -398,8 +448,13 @@ class HashAddress():
         is_duplicate (boolean, optional): Whether the hash address created was
             a duplicate of a previously existing file. Can only be ``True``
             after a put operation. Defaults to ``False``.
+
     """
-    digest: str
+    digest: bytes
     fs: uHashFS
     abspath: str
     is_duplicate: bool = False
+
+    def __attrs_post_init__(self):
+        #print("HashAddress digest:", self.digest)
+        self.hexdigest = self.digest.hex()
