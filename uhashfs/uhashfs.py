@@ -6,6 +6,7 @@ import io
 import os
 import sys
 import time
+from itertools import product
 from tempfile import NamedTemporaryFile
 import binascii
 import redis
@@ -13,12 +14,10 @@ import attr
 
 
 def compact(items):
-    """Return only truthy elements of `items`."""
     return [item for item in items if item]
 
 
 def unshard(path):
-    """Unshard path to determine hash value."""
     try:
         assert os.path.sep in path
     except AssertionError:
@@ -73,14 +72,11 @@ class uHashFS():
         width (int, optional): Width of each subfolder to create when saving a
             file.
         algorithm (str): Hash algorithm to use when computing file hash.
-            Algorithm should be available in ``hashlib`` module. Defaults to
-            ``'sha256'``.
+            Algorithm should be available in ``hashlib`` module.
         fmode (int, optional): File mode permission to set when adding files to
-            directory. Defaults to ``0o664`` which allows owner/group to
-            read/write and everyone else to read.
+            directory.
         dmode (int, optional): Directory mode permission to set for
-            subdirectories. Defaults to ``0o755`` which allows owner/group to
-            read/write and everyone else to read and everyone to execute.
+            subdirectories.
     """
     root: str = attr.ib(converter=Path)
     tmproot: str = attr.ib(converter=Path)
@@ -109,11 +105,6 @@ class uHashFS():
         assert self.width > 0
 
     def _mktemp(self):
-        """Create a named temporary file and return its filename. The
-        temporary file is geneated in the hasfs root to make move()'s by
-        rename instead of copy/delete.
-        TODO FIX: A second uHashFS instance might return a tempfile in .files()
-        """
         try:
             tmp = NamedTemporaryFile(delete=False, dir=self.tmproot,
                                      prefix='_tmp')
@@ -132,15 +123,6 @@ class uHashFS():
         return tmp
 
     def _mvtemp(self, tmp, filepath, ts=False):
-        """Move file (even if empty) to filepath on same filesystem.
-
-        Args:
-            tmp (str): Source path.  # TODO accept non-unicode filenames
-            filepath (str): Destination path. Must be on same filesystem tmp.
-
-        Returns:
-            (bool): True if filepath already existed.
-        """
         # if filepath does not exist, rename now
         try:
             os.link(tmp, filepath, follow_symlinks=False)
@@ -182,16 +164,14 @@ class uHashFS():
         os.unlink(tmp)  # only if link() didnt throw exception
         return False  # file did not already exist
 
+    def edges(self):  # ugly, should be generator
+        ns = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f']
+        ns_width = [''.join(comb) for comb in product(ns, repeat=self.width)]
+        ns_depth = [''.join(comb) for comb in product(ns_width, repeat=self.depth)]
+        leaf_paths = ['/'.join(list(comb)) for comb in ns_depth]
+        return leaf_paths
+
     def putstr(self, string):
-        """Store contents of `string` on disk using its content hash for the
-        address.
-
-        Args:
-            string (str): Python 3 str.
-
-        Returns:
-            HashAddress: File's hash address.
-        """
         try:
             string = io.StringIO(string)
         except TypeError:
@@ -199,29 +179,11 @@ class uHashFS():
         return self.putstream(string)
 
     def putstream(self, request, progress=False):
-        """Store contents of `requests.model.Request` or any object with a
-        .read() method on disk using its content hash for the address.
-
-        Args:
-            stream (requests.model.Request): Readable object or path to file.
-
-        Returns:
-            HashAddress: File's hash address.
-        """
         tmp = self._mktemp()
         digest = self.computehash(request, tmp, progress=progress)
         return self._commit(digest=digest, tmp=tmp)
 
     def putfile(self, infile, ts=True):
-        """Store contents of `file` on disk using its content hash for the
-        address.
-
-        Args:
-            infile (mixed): Readable object or path to file.
-
-        Returns:
-            HashAddress: File's hash address.
-        """
         if ts:
             infile_stat = os.stat(infile)
             ts = (infile_stat.st_atime_ns, infile_stat.st_mtime_ns)
@@ -261,18 +223,6 @@ class uHashFS():
         raise FileNotFoundError
 
     def getdigest(self, digest):
-        """Return :class:`HashAdress` from given id. If `id` does not
-        refer to a valid file, then ``None`` is returned.
-
-        Args:
-            digest (str): Address ID.
-
-        Returns:
-            HashAddress: File's hash address.
-
-        Raises:
-            FileNotFoundError: If file doesn't exist.
-        """
         realpath = self.digestpath(digest)
         if os.path.isfile(realpath):
             return HashAddress(digest, self, realpath)  # todo
@@ -283,18 +233,6 @@ class uHashFS():
         return self.openhexdigest(hexdigest)
 
     def openhexdigest(self, hexdigest, mode='rb'):
-        """Return open buffer object from given id.
-
-        Args:
-            digest (str): Address ID.
-            mode (str, optional): Mode to open file in. Defaults to ``'rb'``.
-
-        Returns:
-            Buffer: An ``io`` buffer dependent on the `mode`.
-
-        Raises:
-            FileNotFoundError: If file doesn't exist.
-        """
         realpath = self.hexdigestpath(hexdigest)
         return io.open(realpath, mode)
 
@@ -304,37 +242,21 @@ class uHashFS():
         return self.deletehexdigest(hexdigest)
 
     def deletehexdigest(self, hexdigest):
-        """Delete file using id.
-
-        Args:
-            digest (str): Address ID.
-
-        Returns:
-           True (bool): If file was removed.
-
-        Raises:
-            FileNotFoundError: If file doesn't exist.
-        """
         realpath = self.hexdigestpath(hexdigest)
         assert realpath.startswith(str(self.root))
         os.remove(realpath)
         return True
 
     def files(self):
-        """Return generator that yields all files in the :attr:`root`
-        directory.
-        """
         for folder, _, files in os.walk(self.root):
             for afile in files:
                 yield os.path.abspath(os.path.join(folder, afile))
 
     def existsdigest(self, digest):
-        """Check whether a given file digest exists on disk."""
         hexdigest = binascii.unhexlify(digest)
         return self.existshexdigest(hexdigest)
 
     def existshexdigest(self, hexdigest):
-        """Check whether a given file digest exists on disk."""
         return os.path.isfile(self.hexdigestpath(hexdigest))
 
     def digestpath(self, digest):
@@ -343,17 +265,6 @@ class uHashFS():
         return self.hexdigestpath(hexdigest)
 
     def hexdigestpath(self, hexdigest):
-        """Build the file path for a given hash id.
-
-        Args:
-            digest (str): Address ID.
-
-        Returns:
-            path: An absolute file path.
-
-        Raises:
-            ValueError: If the ID is the wrong length or not hex.
-        """
         if len(hexdigest) != self.hexdigestlen:
             raise ValueError('Invalid ID: "{0}" is not {1} digits '
                              'long'.format(hexdigest, self.hexdigestlen))
@@ -377,7 +288,6 @@ class uHashFS():
             print("", file=sys.stderr)
 
     def computehash(self, stream, tmp, progress=False):
-        """Compute hash of file using :attr:`algorithm`."""
         hashobj = hashlib.new(self.algorithm)
         #print("type(sream):", type(stream))
         try:
@@ -407,16 +317,10 @@ class uHashFS():
         return hashobj.digest()
 
     def shard(self, digest):
-        """Creates a list of `depth` number of tokens with width
-        `width` from the first part of the digest plus the remainder."""
         return compact([digest[i * self.width:self.width * (i + 1)]
                         for i in range(self.depth)] + [digest])
 
     def corrupted(self):
-        """Return generator that yields corrupted files as ``(path, address)``
-        where ``path`` is the path of the corrupted file and ``address`` is
-        the :class:`HashAddress` of the expected location(hash).
-        """
         for path in self.files():
             digest = hash_file(path, self.algorithm, tmp=None)
             hexdigest = digest.hex()
@@ -426,35 +330,23 @@ class uHashFS():
                 yield (path, HashAddress(digest, self, expected_path))
 
     def __contains__(self, hexdigest):
-        """Return whether a given digest is contained in the :attr:`root`
-        directory. UGLY. Need generics. Or delete method.
-        """
-
         return self.existshexdigest(hexdigest)
 
     def __iter__(self):
-        """Iterate over all files in the :attr:`root` directory."""
         return self.files()
 
 
 @attr.s(auto_attribs=True)
 class HashAddress():
-    """File address containing file's path on disk and it's content hash digest.
-
-    Attributes:
-        digest (str): Hash ID (hexdigest) of file contents.
-        fs (obj): ``HashFs`` object.
-        abspath (str): Absoluate path location of file on disk.
-        is_duplicate (boolean, optional): Whether the hash address created was
-            a duplicate of a previously existing file. Can only be ``True``
-            after a put operation. Defaults to ``False``.
-
-    """
     digest: bytes
     fs: uHashFS
-    abspath: str
+    abspath: str = attr.ib(converter=Path)
     is_duplicate: bool = False
 
     def __attrs_post_init__(self):
+        #self.abspath.resolve()  # todo, see if this stat()'s
         #print("HashAddress digest:", self.digest)
         self.hexdigest = self.digest.hex()
+        #self.abspath = self.fs.hexdigestpath(self.hexdigest)
+        self.relative_path = self.abspath.relative_to(self.fs.root)
+
