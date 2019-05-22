@@ -25,7 +25,7 @@ class path_iterator():
     def __attrs_post_init__(self):
         self.root = self.path
 
-    def go(self, path=self.path):
+    def go(s, path=self.path):
         ceprint(s.min_depth, s.max_depth)
         depth = len(s.path.parts) - len(s.root.parts)  # len('/') == 1
         ceprint("depth:", depth)
