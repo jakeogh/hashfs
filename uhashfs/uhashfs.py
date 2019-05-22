@@ -13,7 +13,7 @@ import redis
 import attr
 
 
-def path_iter(p, depth=None):
+def path_iter(p, max_depth=None, follow_symlinks=False):
     if isinstance(p, str):
         p = Path(p)
     elif isinstance(p, bytes):
@@ -23,13 +23,15 @@ def path_iter(p, depth=None):
     #print("yeilding p.absolute():", p.absolute())
     yield p.absolute()
     for sub in p.iterdir():
+        depth = len(sub.parts)
+        if depth >= max_depth:
+            return
         if sub.is_symlink():  # must be before is_dir()
             yield sub.absolute()
         elif sub.is_dir():
-            yield from path_iter(sub, depth)
+            yield from path_iter(p=sub, max_depth=max_depth, follow_symlinks=follow_symlinks)
         else:
             yield sub.absolute()
-
 
 
 def compact(items):
