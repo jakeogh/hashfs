@@ -165,10 +165,10 @@ class uHashFS():
         return False  # file did not already exist
 
     def edges(self):  # ugly, should be generator
-        ns = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f']
-        ns_width = [''.join(comb) for comb in product(ns, repeat=self.width)]
-        ns_depth = [''.join(comb) for comb in product(ns_width, repeat=self.depth)]
-        leaf_paths = ['/'.join(list(comb)) for comb in ns_depth]
+        ns = ('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f')
+        ns_width = (''.join(comb) for comb in product(ns, repeat=self.width))
+        ns_depth = (''.join(comb) for comb in product(ns_width, repeat=self.depth))
+        leaf_paths = ('/'.join(list(comb)) for comb in ns_depth)
         return leaf_paths
 
     def putstr(self, string):
