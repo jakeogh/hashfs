@@ -5,7 +5,7 @@ from io import BufferedReader
 import os
 import py
 import pytest
-from uhashfs import uHashFS, unshard
+from uhashfs import uHashFS, unshard, path_is_parent
 
 TIMESTAMP = str(time.time())
 
@@ -21,14 +21,8 @@ def testpath_fsroot(tmpdir):
 
 
 @pytest.fixture
-def testpath_fsroot_tmp(tmpdir):
-    return tmpdir.mkdir('uhashfs_root' + TIMESTAMP + '.tmp')
-
-
-@pytest.fixture
 def fs_relative():
-    return uHashFS(root='relative_path' + TIMESTAMP,
-                   tmproot='relative_path' + TIMESTAMP + '.tmp')
+    return uHashFS(root='relative_path' + TIMESTAMP)
 
 
 @pytest.fixture
@@ -57,6 +51,8 @@ def fileio_fsroot(testfile_fsroot):
         io.write(b'foo')
 
     io = open(str(testfile_fsroot), 'rb')
+    #import IPython
+    #IPython.embed()
     yield io
     io.close()
 
@@ -84,14 +80,13 @@ def filepath_fsroot(testfile_fsroot):
 
 
 @pytest.fixture
-def fs(testpath_fsroot, testpath_fsroot_tmp):
-    return uHashFS(root=str(testpath_fsroot), tmproot=str(testpath_fsroot_tmp))
+def fs(testpath_fsroot):
+    return uHashFS(root=str(testpath_fsroot))
 
 
 @pytest.fixture
-def fssha1(testpath_fsroot, testpath_fsroot_tmp):
-    return uHashFS(root=str(testpath_fsroot),
-                   tmproot=str(testpath_fsroot_tmp), algorithm='sha1')
+def fssha1(testpath_fsroot):
+    return uHashFS(root=str(testpath_fsroot), algorithm='sha1')
 
 
 def putstr_range(fs, count):
@@ -204,8 +199,8 @@ def test_uhashfs_putstr_empty(fs):
 def test_uhashfs_address(fs, unicodestring):
     address = fs.putstr(unicodestring)
 
-    assert str(fs.root) in address.abspath
-    assert address.abspath.split(os.path.sep)[-1] == address.hexdigest
+    assert path_is_parent(fs.root, address.abspath)
+    assert address.abspath.name == address.hexdigest
     assert not address.is_duplicate
     assert len(list(fs.files())) == 1
 
@@ -253,15 +248,14 @@ def test_uhashfssh1_contains(fssha1, unicodestring):
 
 
 def test_uhashfs_relative(fs_relative):
-    assert os.path.sep in str(fs_relative.root)
-    assert str(fs_relative.root).startswith(os.path.sep)
-    assert len(list(fs_relative.files())) == 0
+    assert fs_relative.root.is_absolute() # it gets converted to abs
+    with pytest.raises(FileNotFoundError):
+        assert len(list(fs_relative.files())) == 0  # path does not exist until written to
 
 
 def test_uhashfs_relative_putstr(fs_relative, unicodestring):
     fs_relative.putstr(unicodestring)
-    assert os.path.sep in str(fs_relative.root)
-    assert str(fs_relative.root).startswith(os.path.sep)
+    assert fs_relative.root.is_absolute()
     assert len(list(fs_relative.files())) == 1
 
 
@@ -289,7 +283,7 @@ def test_uhashfs_deletehexdigest(fs, unicodestring, address_attr):
     address = fs.putstr(unicodestring)
 
     fs.deletehexdigest(getattr(address, address_attr))
-    assert len(os.listdir(fs.root)) == 1
+    assert len(os.listdir(fs.root)) == 2  # _tmp and hash_folder
 
 
 def test_uhashfs_deletehexdigest_error(fs):
@@ -319,7 +313,7 @@ def test_uhashfs_unshard_error(fs):
 
 
 def test_uhashfs_hexdigestpath(fs):
-    assert fs.hexdigestpath('0' * fs.hexdigestlen) == str(fs.root) + \
+    assert fs.hexdigestpath('0' * fs.hexdigestlen).as_posix() == str(fs.root) + \
         os.path.sep + \
         fs.algorithm + \
         os.path.sep + \
@@ -369,9 +363,19 @@ def test_uhashfs_iter(fs):
 
 def test_uhashfs_corrupted(fs, unicodestring):
     address = fs.putstr(unicodestring)
+    with pytest.raises(PermissionError):
+        with open(address.abspath, 'ab') as fh:
+            fh.write(b'f')
+    #print(address)
+    os.chmod(address.abspath, 0o644)  # todo
+    #import IPython
+    #IPython.embed()
+
+    assert len(list(fs.check())) == 0  # todo write file back with incorrect perms
+
     with open(address.abspath, 'ab') as fh:
         fh.write(b'f')
-    assert len(list(fs.corrupted())) == 1
+    assert len(list(fs.check())) == 1
 
 
 def test_uhashfs_correct_file_count(fs):

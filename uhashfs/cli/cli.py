@@ -3,72 +3,59 @@
 import os
 import sys
 import hashlib
+import humanize
 from pathlib import Path
 import click
 from uhashfs import uHashFS
-from uhashfs import path_iterator
+from uhashfs import uHashFSMetadata
+from uhashfs import Path_Iterator
+from uhashfs import really_is_file
+from uhashfs import really_is_dir
 
-#def all_files_iter(p):
-#    if isinstance(p, str):
-#        p = Path(p)
-#    elif isinstance(p, bytes):
-#        p = Path(os.fsdecode(p))
-#        #p = p.decode()
-#    assert isinstance(p, Path)
-#    #print("yeilding p.absolute():", p.absolute())
-#    yield p.absolute()
-#    for sub in p.iterdir():
-#        if sub.is_symlink():  # must be before is_dir()
-#            yield sub.absolute()
-#        elif sub.is_dir():
-#            yield from all_files_iter(sub)
-#        else:
-#            yield sub.absolute()
+ALGS = list(hashlib.algorithms_available)
+ALGS.sort()
 
 
 @click.group()
 @click.argument("root", type=click.Path(file_okay=False, resolve_path=True,
                                         allow_dash=True), nargs=1)
+@click.option("--metaroot", type=click.Path(file_okay=False, resolve_path=True,
+                                            allow_dash=True))
 @click.option('--depth', type=int)
 @click.option('--width', type=int)
-@click.option('--algorithm', type=click.Choice(hashlib.algorithms_available))
+@click.option('--algorithm', type=click.Choice(ALGS))
 @click.option('--fmode', type=int)
 @click.option('--dmode', type=int)
 @click.option('--redis', is_flag=True)
 @click.option('--verbose', is_flag=True)
+@click.option('--legacy', is_flag=True)
 @click.pass_context
 def cli(ctx, **kwargs):
     settings = {}
+    meta_settings = {}
     for name, value in kwargs.items():
-        print(name, value)
+        #print(name, value)
         if value:
-            settings[name] = value
+            if name == "metaroot":
+                meta_settings[name] = value
+            else:
+                settings[name] = value
     settings['root'] = Path(settings['root'])
-    tmproot = settings['root'] / "tmp"
-    settings['tmproot'] = tmproot
+    #tmproot = settings['root'] / "tmp"
+    #settings['tmproot'] = tmproot
     if 'verbose' not in settings.keys():
         settings['verbose'] = False
-    ctx.obj = uHashFS(**settings)
+    data_fs = uHashFS(**settings)
+    if 'metaroot' in meta_settings.keys():
+        settings['uhashfs'] = data_fs
+        settings['root'] = Path(meta_settings['metaroot'])
+        #meta_fs = uHashFSMetadata(root=meta_settings['metaroot'], uhashfs=data_fs, verbose=settings['verbose'])
+        meta_fs = uHashFSMetadata(**settings)
+        ctx.obj = meta_fs
+    else:
+        ctx.obj = data_fs
     if settings['verbose']:
         print(ctx.obj, file=sys.stderr)
-
-
-def really_is_file(path):
-    assert isinstance(path, Path)
-    if path.is_symlink():
-        return False
-    if path.is_file(): # is_file() answers True for symlinks (unless they are broken) and crashes with an OSError on self-symlinks
-        return True
-    return False
-
-
-def really_is_dir(path):
-    assert isinstance(path, Path)
-    if path.is_symlink():
-        return False
-    if path.is_dir(): # is_dir() answers False for broken symlinks, and crashes with an OSError on self-symlinks
-        return True
-    return False
 
 
 @cli.command()
@@ -76,29 +63,30 @@ def really_is_dir(path):
 @click.option('--recursive', is_flag=True)
 @click.pass_obj
 def put(obj, infiles, recursive):
-    path_iter = path_iterator(infile).go()
     for infile in infiles:
-        print("infile:", infile)
-        if recursive:
-            for item in path_iter(infile):
-                print(item.absolute)  # yep. that's ugly. you cant just print Path objects
-                if really_is_file(item):
-                    newitem = obj.putfile(item)
-                else:
-                    print("notafile item:", bytes(item))
-                    print("notafile item:", item.absolute)  # deliberate, dont "fix"
-                    try:
-                        assert really_is_dir(item)
-                    except AssertionError:
+        path_iter = Path_Iterator(infile).go()
+        for infile in infiles:
+            print("infile:", infile)
+            if recursive:
+                for item in path_iter(infile):
+                    print(item.absolute)  # yep. that's ugly. you cant just print Path objects
+                    if really_is_file(item):
+                        newitem = obj.putfile(item)
+                    else:
+                        print("notafile item:", bytes(item))
+                        print("notafile item:", item.absolute)  # deliberate, dont "fix"
                         try:
-                            item.is_symlink()
-                        except OSError as e:
-                            assert '[Errno 40] Too many levels of symbolic links:' in e.strerror
-        else:
-            print("else:", infile)
-            newitem = obj.putfile(infile)
+                            assert really_is_dir(item)
+                        except AssertionError:
+                            try:
+                                item.is_symlink()
+                            except OSError as e:
+                                assert '[Errno 40] Too many levels of symbolic links:' in e.strerror
+            else:
+                print("else:", infile)
+                newitem = obj.putfile(infile)
 
-        print(newitem.hexdigest, infile)
+            print(newitem.hexdigest, infile)
 
 
 @cli.command()
@@ -106,7 +94,7 @@ def put(obj, infiles, recursive):
 @click.pass_obj
 def get(obj, digests):
     for digest in digests:
-        item = obj.get(digest)
+        item = obj.gethexdigest(digest)
         print(item.abspath)
 
 
@@ -126,14 +114,51 @@ def delete(obj, digests):
 @click.pass_obj
 def iterate(obj):
     for hashfile in obj.files():
-        print("file:", hashfile)
+        print(hashfile)
+
+
+@cli.command()
+@click.option("--variance", type=click.FloatRange(0, 100), default=0.01)  # 100 is arb
+@click.option('--verbose', is_flag=True)
+@click.pass_obj
+def estimate_edge_properites(obj, variance, verbose):
+    if verbose:
+        obj.verbose = True
+    objects, size = obj.estimate_edge_properites(variance)
+    print(humanize.intcomma(objects), humanize.naturalsize(size))
+
+
+@cli.command()
+@click.option("--variance", type=click.FloatRange(0, 100), default=0.01)  # 100 is arb
+@click.option('--verbose', is_flag=True)
+@click.pass_obj
+def estimate_tree_properites(obj, variance, verbose):
+    if verbose:
+        obj.verbose = True
+    objects, size = obj.estimate_tree_properites(variance)
+    print(humanize.intcomma(objects), humanize.naturalsize(size))
 
 
 @cli.command()
 @click.pass_obj
-def checkcorrupt(obj):
-    for hashfile in obj.corrupted():
-        print("corrupt:", hashfile)
+def ipython(obj):
+    import IPython
+    IPython.embed()
+
+
+@cli.command()
+@click.option('--delete-empty', is_flag=True)
+@click.option('--skip-cached', is_flag=True)
+@click.option('--quiet', is_flag=True)
+@click.pass_obj
+def check(obj, delete_empty, skip_cached, quiet):
+    for path, expected_hash in obj.check(skip_cached=skip_cached, quiet=quiet):
+        print(path)
+        if expected_hash.fs.emptyhexdigest:
+            print("path:", path, "matches the emptydigest for", expected_hash.fs.algorithm, file=sys.stderr)
+            if delete_empty:
+                os.unlink(path)
+                print("deleted:", path, file=sys.stderr)
 
 
 if __name__ == '__main__':
