@@ -15,10 +15,10 @@ from math import inf
 from kcl.printops import ceprint
 
 def path_iter(p, root, min_depth=1, max_depth=inf, follow_symlinks=False, return_dirs=True, return_files=True):
-    ceprint("type(p):", p)
-    ceprint("p:", p)
-    ceprint("type(root):", root)
-    ceprint("root:", root)
+    ceprint("type(p)   :", type(p))
+    ceprint("p         :", p)
+    ceprint("type(root):", type(root))
+    ceprint("root      :", root)
     assert p == root  # how should this really be?
     ceprint(min_depth, max_depth)
     if isinstance(p, str):
