@@ -20,7 +20,7 @@ from .__meta__ import (
     __license__
 )
 
-from .uhashfs import uHashFS, HashAddress, unshard
+from .uhashfs import uHashFS, HashAddress, unshard, path_iter
 
 
-__all__ = ('uHashFS', 'HashAddress', 'unshard')
+__all__ = ('uHashFS', 'HashAddress', 'unshard', 'path_iter')
