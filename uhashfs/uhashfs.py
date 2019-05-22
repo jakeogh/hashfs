@@ -27,19 +27,19 @@ class path_iterator():
 
     def go(s):
         ceprint(s.min_depth, s.max_depth)
-        depth = len(s.p.parts) - len(s.root.parts)  # len('/') == 1
+        depth = len(s.path.parts) - len(s.root.parts)  # len('/') == 1
         ceprint("depth:", depth)
         if depth >= s.min_depth:
-            if s.return_dirs and p.is_dir():
+            if s.return_dirs and s.path.is_dir():
                 if depth <= s.max_depth:
-                    yield s.p.absolute()
-            if return_files and not s.p.is_dir():  # dir/fifo/file/symlink/socket/reserved/char/block/bla/bla
+                    yield s.path.absolute()
+            if s.return_files and not s.path.is_dir():  # dir/fifo/file/symlink/socket/reserved/char/block/bla/bla
                 if depth <= s.max_depth:
-                    yield s.p.absolute()
+                    yield s.path.absolute()
 
         if depth > s.max_depth:
             return
-        for sub in s.p.iterdir():
+        for sub in s.path.iterdir():
             depth = len(sub.parts) - len(s.root.parts)
             ceprint("depth:", depth)
             if depth > s.max_depth:
