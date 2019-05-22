@@ -23,9 +23,10 @@ def path_iter(p, max_depth=None, follow_symlinks=False):
     #print("yeilding p.absolute():", p.absolute())
     yield p.absolute()
     for sub in p.iterdir():
-        depth = len(sub.parts)
-        if depth >= max_depth:
-            return
+        if max_depth:
+            depth = len(sub.parts)
+            if depth >= max_depth:
+                return
         if sub.is_symlink():  # must be before is_dir()
             yield sub.absolute()
         elif sub.is_dir():
