@@ -25,7 +25,7 @@ class path_iterator():
     def __attrs_post_init__(self):
         self.root = self.path
 
-    def go(s):
+    def go(s, path):
         ceprint(s.min_depth, s.max_depth)
         depth = len(s.path.parts) - len(s.root.parts)  # len('/') == 1
         ceprint("depth:", depth)
@@ -49,7 +49,7 @@ class path_iterator():
                     yield sub.absolute()
             elif sub.is_dir():
                 print("could yield dir:", sub)
-                yield from s.go(path=sub, min_depth=s.min_depth, max_depth=s.max_depth, follow_symlinks=s.follow_symlinks, return_dirs=s.return_dirs)
+                yield from s.go(path=sub)
             else:
                 if s.return_files:
                     yield sub.absolute()
