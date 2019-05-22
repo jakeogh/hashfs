@@ -6,24 +6,24 @@ import hashlib
 from pathlib import Path
 import click
 from uhashfs import uHashFS
+from uhashfs import path_iter
 
-
-def all_files_iter(p):
-    if isinstance(p, str):
-        p = Path(p)
-    elif isinstance(p, bytes):
-        p = Path(os.fsdecode(p))
-        #p = p.decode()
-    assert isinstance(p, Path)
-    #print("yeilding p.absolute():", p.absolute())
-    yield p.absolute()
-    for sub in p.iterdir():
-        if sub.is_symlink():  # must be before is_dir()
-            yield sub.absolute()
-        elif sub.is_dir():
-            yield from all_files_iter(sub)
-        else:
-            yield sub.absolute()
+#def all_files_iter(p):
+#    if isinstance(p, str):
+#        p = Path(p)
+#    elif isinstance(p, bytes):
+#        p = Path(os.fsdecode(p))
+#        #p = p.decode()
+#    assert isinstance(p, Path)
+#    #print("yeilding p.absolute():", p.absolute())
+#    yield p.absolute()
+#    for sub in p.iterdir():
+#        if sub.is_symlink():  # must be before is_dir()
+#            yield sub.absolute()
+#        elif sub.is_dir():
+#            yield from all_files_iter(sub)
+#        else:
+#            yield sub.absolute()
 
 
 @click.group()
@@ -79,7 +79,7 @@ def put(obj, infiles, recursive):
     for infile in infiles:
         print("infile:", infile)
         if recursive:
-            for item in all_files_iter(infile):
+            for item in path_iter(infile):
                 print(item.absolute)  # yep. that's ugly. you cant just print Path objects
                 if really_is_file(item):
                     newitem = obj.putfile(item)

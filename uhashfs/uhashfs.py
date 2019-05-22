@@ -13,6 +13,25 @@ import redis
 import attr
 
 
+def path_iter(p, depth=None):
+    if isinstance(p, str):
+        p = Path(p)
+    elif isinstance(p, bytes):
+        p = Path(os.fsdecode(p))
+        #p = p.decode()
+    assert isinstance(p, Path)
+    #print("yeilding p.absolute():", p.absolute())
+    yield p.absolute()
+    for sub in p.iterdir():
+        if sub.is_symlink():  # must be before is_dir()
+            yield sub.absolute()
+        elif sub.is_dir():
+            yield from path_iter(sub, depth)
+        else:
+            yield sub.absolute()
+
+
+
 def compact(items):
     return [item for item in items if item]
 
