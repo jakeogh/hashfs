@@ -13,7 +13,7 @@ import redis
 import attr
 
 
-def path_iter(p, max_depth=None, follow_symlinks=False):
+def path_iter(p, min_depth=None, max_depth=None, follow_symlinks=False, return_dirs=True, return_files=True):
     if isinstance(p, str):
         p = Path(p)
     elif isinstance(p, bytes):
@@ -21,18 +21,21 @@ def path_iter(p, max_depth=None, follow_symlinks=False):
         #p = p.decode()
     assert isinstance(p, Path)
     #print("yeilding p.absolute():", p.absolute())
-    yield p.absolute()
+    if return_dirs:
+        yield p.absolute()
     for sub in p.iterdir():
+        depth = len(sub.parts)
         if max_depth:
-            depth = len(sub.parts)
             if depth >= max_depth:
                 return
         if sub.is_symlink():  # must be before is_dir()
-            yield sub.absolute()
+            if return_files:
+                yield sub.absolute()
         elif sub.is_dir():
-            yield from path_iter(p=sub, max_depth=max_depth, follow_symlinks=follow_symlinks)
+            yield from path_iter(p=sub, min_depth=min_depth, max_depth=max_depth, follow_symlinks=follow_symlinks)
         else:
-            yield sub.absolute()
+            if return_files:
+                yield sub.absolute()
 
 
 def compact(items):
