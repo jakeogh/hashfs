@@ -11,27 +11,35 @@ from tempfile import NamedTemporaryFile
 import binascii
 import redis
 import attr
+from math import inf
 
 
-def path_iter(p, min_depth=None, max_depth=None, follow_symlinks=False, return_dirs=True, return_files=True):
+def path_iter(p, min_depth=1, max_depth=inf, follow_symlinks=False, return_dirs=True, return_files=True):
     if isinstance(p, str):
         p = Path(p)
     elif isinstance(p, bytes):
         p = Path(os.fsdecode(p))
-        #p = p.decode()
     assert isinstance(p, Path)
     #print("yeilding p.absolute():", p.absolute())
-    if return_dirs:
-        yield p.absolute()
+    depth = len(p.parts)  # len('/') == 1
+
+    if depth >= min_depth:
+        if return_dirs and p.is_dir():
+            yield p.absolute()  # bug, didnt check max_depth
+        if return_files and not p.is_dir():  # dir/fifo/file/symlink/socket/reserved/char/block/bla/bla
+            yield p.absolute()  # bug, didnt check max_depth
+ 
+    if depth > max_depth:
+        return
     for sub in p.iterdir():
         depth = len(sub.parts)
-        if max_depth:
-            if depth >= max_depth:
-                return
-        if sub.is_symlink():  # must be before is_dir()
+        if depth > max_depth:
+            return
+        if sub.is_symlink():  # must be before is_dir() # bug didnt check follow_symlinks
             if return_files:
                 yield sub.absolute()
         elif sub.is_dir():
+            print("could yield dir:", sub)
             yield from path_iter(p=sub, min_depth=min_depth, max_depth=max_depth, follow_symlinks=follow_symlinks)
         else:
             if return_files:
