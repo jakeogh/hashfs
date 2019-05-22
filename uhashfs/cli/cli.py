@@ -6,7 +6,7 @@ import hashlib
 from pathlib import Path
 import click
 from uhashfs import uHashFS
-from uhashfs import path_iter
+from uhashfs import path_iterator
 
 #def all_files_iter(p):
 #    if isinstance(p, str):
@@ -76,6 +76,7 @@ def really_is_dir(path):
 @click.option('--recursive', is_flag=True)
 @click.pass_obj
 def put(obj, infiles, recursive):
+    path_iter = path_iterator(infile).go()
     for infile in infiles:
         print("infile:", infile)
         if recursive:
