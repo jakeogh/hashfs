@@ -14,7 +14,8 @@ import attr
 from math import inf
 from kcl.printops import ceprint
 
-def path_iter(p, min_depth=1, max_depth=inf, follow_symlinks=False, return_dirs=True, return_files=True):
+def path_iter(p, root, min_depth=1, max_depth=inf, follow_symlinks=False, return_dirs=True, return_files=True):
+    assert p == root  # how should this really be?
     ceprint(min_depth, max_depth)
     if isinstance(p, str):
         p = Path(p)
@@ -22,18 +23,21 @@ def path_iter(p, min_depth=1, max_depth=inf, follow_symlinks=False, return_dirs=
         p = Path(os.fsdecode(p))
     assert isinstance(p, Path)
     #print("yeilding p.absolute():", p.absolute())
-    depth = len(p.parts)  # len('/') == 1
-
+    depth = len(p.parts) - len(root.parts)  # len('/') == 1
+    ceprint("depth:", depth)
     if depth >= min_depth:
         if return_dirs and p.is_dir():
-            yield p.absolute()  # bug, didnt check max_depth
+            if depth <= max_depth:
+                yield p.absolute()
         if return_files and not p.is_dir():  # dir/fifo/file/symlink/socket/reserved/char/block/bla/bla
-            yield p.absolute()  # bug, didnt check max_depth
- 
+            if depth <= max_depth:
+                yield p.absolute()
+
     if depth > max_depth:
         return
     for sub in p.iterdir():
-        depth = len(sub.parts)
+        depth = len(sub.parts) - len(root.parts)
+        ceprint("depth:", depth)
         if depth > max_depth:
             return
         if sub.is_symlink():  # must be before is_dir() # bug didnt check follow_symlinks
@@ -41,7 +45,7 @@ def path_iter(p, min_depth=1, max_depth=inf, follow_symlinks=False, return_dirs=
                 yield sub.absolute()
         elif sub.is_dir():
             print("could yield dir:", sub)
-            yield from path_iter(p=sub, min_depth=min_depth, max_depth=max_depth, follow_symlinks=follow_symlinks)
+            yield from path_iter(p=sub, root=root, min_depth=min_depth, max_depth=max_depth, follow_symlinks=follow_symlinks)
         else:
             if return_files:
                 yield sub.absolute()
