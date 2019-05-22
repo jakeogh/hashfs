@@ -12,9 +12,10 @@ import binascii
 import redis
 import attr
 from math import inf
-
+from kcl.printops import ceprint
 
 def path_iter(p, min_depth=1, max_depth=inf, follow_symlinks=False, return_dirs=True, return_files=True):
+    ceprint(min_depth, max_depth)
     if isinstance(p, str):
         p = Path(p)
     elif isinstance(p, bytes):
