@@ -14,45 +14,45 @@ import attr
 from math import inf
 from kcl.printops import ceprint
 
-def path_iter(p, root, min_depth=1, max_depth=inf, follow_symlinks=False, return_dirs=True, return_files=True):
-    ceprint("type(p)   :", type(p))
-    ceprint("p         :", p)
-    ceprint("type(root):", type(root))
-    ceprint("root      :", root)
-    assert p == root  # how should this really be?
-    ceprint(min_depth, max_depth)
-    if isinstance(p, str):
-        p = Path(p)
-    elif isinstance(p, bytes):
-        p = Path(os.fsdecode(p))
-    assert isinstance(p, Path)
-    #print("yeilding p.absolute():", p.absolute())
-    depth = len(p.parts) - len(root.parts)  # len('/') == 1
-    ceprint("depth:", depth)
-    if depth >= min_depth:
-        if return_dirs and p.is_dir():
-            if depth <= max_depth:
-                yield p.absolute()
-        if return_files and not p.is_dir():  # dir/fifo/file/symlink/socket/reserved/char/block/bla/bla
-            if depth <= max_depth:
-                yield p.absolute()
+@attr.s(auto_attribs=True, kw_only=True)
+class path_iterator():
+    path: str = attr.ib(converter=Path)
+    min_depth: int = 1
+    max_depth: object = inf
+    follow_symlinks: bool = False
+    return_dirs: bool = True
+    return_files: bool = True
+    def __attrs_post_init__(self):
+        self.root = self.path
 
-    if depth > max_depth:
-        return
-    for sub in p.iterdir():
-        depth = len(sub.parts) - len(root.parts)
+    def go(s):
+        ceprint(s.min_depth, s.max_depth)
+        depth = len(s.p.parts) - len(s.root.parts)  # len('/') == 1
         ceprint("depth:", depth)
-        if depth > max_depth:
+        if depth >= s.min_depth:
+            if s.return_dirs and p.is_dir():
+                if depth <= s.max_depth:
+                    yield s.p.absolute()
+            if return_files and not s.p.is_dir():  # dir/fifo/file/symlink/socket/reserved/char/block/bla/bla
+                if depth <= s.max_depth:
+                    yield s.p.absolute()
+
+        if depth > s.max_depth:
             return
-        if sub.is_symlink():  # must be before is_dir() # bug didnt check follow_symlinks
-            if return_files:
-                yield sub.absolute()
-        elif sub.is_dir():
-            print("could yield dir:", sub)
-            yield from path_iter(p=sub, root=root, min_depth=min_depth, max_depth=max_depth, follow_symlinks=follow_symlinks)
-        else:
-            if return_files:
-                yield sub.absolute()
+        for sub in s.p.iterdir():
+            depth = len(sub.parts) - len(s.root.parts)
+            ceprint("depth:", depth)
+            if depth > s.max_depth:
+                return
+            if sub.is_symlink():  # must be before is_dir() # bug didnt check follow_symlinks
+                if s.return_files:
+                    yield sub.absolute()
+            elif sub.is_dir():
+                print("could yield dir:", sub)
+                yield from s.go(path=sub, min_depth=s.min_depth, max_depth=s.max_depth, follow_symlinks=s.follow_symlinks, return_dirs=s.return_dirs)
+            else:
+                if s.return_files:
+                    yield sub.absolute()
 
 
 def compact(items):
