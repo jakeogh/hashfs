@@ -356,7 +356,7 @@ class uHashFSBase():
         byte_count_estimate = self.edge_count * bytes_per_edge
         return (int(object_count_estimate), byte_count_estimate)
 
-    def check(self, skip_cached=False, quiet=False):  # todo verify perms and attrs
+    def check(self, skip_cached=False, quiet=False, debug=False):  # todo verify perms and attrs
         #import IPython
         #IPython.embed()
         # todo find broken latest_archive symlinks
@@ -372,7 +372,7 @@ class uHashFSBase():
                     print(path, end=pad, file=sys.stderr, flush=True)
             assert path_is_parent(self.root, path)
             rel_root = path.relative_to(self.root)
-            if self.verbose:
+            if debug:
                 eprint("path:", path)
                 eprint("rel_root:", rel_root)
             if not self.legacy:
@@ -382,11 +382,13 @@ class uHashFSBase():
                     if self.redis and skip_cached:
                         if self.redis.zscore(self.rediskey, binascii.unhexlify(path.name)):
                             if self.verbose:
-                                print("skipped hashing:", path)
+                                print(path, "(redis)")
                             continue
 
                     digest = hash_file(path, self.algorithm, tmp=None)
                     hexdigest = digest.hex()
+                    if self.verbose:
+                        print(path, "(hashed)")
                     try:
                         assert len(hexdigest) == len(path.name)
                     except AssertionError as e:
