@@ -14,7 +14,6 @@ import binascii
 import redis
 import attr
 import numpy
-from kcl.printops import ceprint
 from kcl.printops import eprint
 from kcl.symlinkops import create_relative_symlink
 
@@ -367,14 +366,23 @@ class uHashFSMetadata(uHashFSBase):
             try:
                 os.symlink(to_hash.hexdigest, dest / Path(link_name))
             except FileNotFoundError:
-                os.makedirs(dest)
-                os.symlink(to_hash.hexdigest, dest / Path(link_name))
+                try:
+                    os.makedirs(dest)
+                except FileExistsError:
+                    # another process won the mkdir race
+                    assert really_is_dir(dest)  # rare, fine to check assumptions
+
+                try:
+                    os.symlink(to_hash.hexdigest, dest / Path(link_name))
+                except FileExistsError:
+                    # another process won the symlink race
+                    pass
         except FileNotFoundError as e:  # I dont really want to, but python wants an except here
-            raise e
+            raise e  # shouldnt be possible, unless something deletes the dest dir... TODO
         else:  # only do this stuff if the inner try/except did not throw an exception out
             try:
                 os.unlink(dest_about / Path("latest_archive"))
-            except FileNotFoundError:
+            except FileNotFoundError:  # other process already deleted it, but has not re-created it yet
                 pass
             try:
                 create_relative_symlink(dest_archive, dest_about / Path("latest_archive"))
