@@ -39,6 +39,24 @@ def really_is_dir(path):
     return False
 
 
+@attr.s(auto_attribs=True)
+class WDgen():
+    max_width: int
+    max_depth: int
+
+    def __attrs_post_init__(self):
+        self.gen = product(range(self.max_width), range(self.max_depth))
+
+    def go(self):
+        for w, d in self.gen:
+            if w == 0:
+                continue
+            if d == 0:
+                continue
+            else:
+                yield (w, d)
+
+
 @attr.s(auto_attribs=True, kw_only=True)
 class Path_Iterator():
     path: str = attr.ib(converter=Path)
@@ -136,8 +154,10 @@ def get_amtime(infile):
 @attr.s(auto_attribs=True, kw_only=True)
 class uHashFSBase():
     root: str = attr.ib(converter=Path)
-    depth: int = 4
-    width: int = 1
+    depth: int = 0  # autodetect
+    width: int = 0  # autodetect
+    max_width: int = 3  # limit autodetection search space
+    max_depth: int = 6  # limit autodetection search space
     algorithm: str = 'sha3_256'
     fmode: int = 0o444
     dmode: int = 0o755
@@ -147,22 +167,20 @@ class uHashFSBase():
 
     def __attrs_post_init__(self):
         self.root = self.root.resolve()
+        if self.verbose:
+            print("self.root:", self.root, file=sys.stderr)
         self.tmp = "_tmp"  # needed only by uHashFS but required here to make sure it does not collide
         assert self.algorithm != self.tmp
         self.digestlen = hashlib.new(self.algorithm).digest_size
         self.hexdigestlen = self.digestlen * 2
         self.emptydigest = getattr(hashlib, self.algorithm)(b'').digest()
-        # this record could get created when _tmp is created.... it would id a hash tree independent of it's hash folder name
-        # it would also be a way to check the depth and width of a unknown, pre-existing fs in the check()
+        # this record is created when _tmp is created
+        # its used to autodetect the width and depth if a tree
+        # it also makes autodetection of the algorithm possible
         self.emptyhexdigest = self.emptydigest.hex()
         assert len(self.emptydigest) == self.digestlen
         assert len(self.emptyhexdigest) == self.hexdigestlen
-        assert self.depth > 0  # depth in theory could be zero, but then why use this?
-        assert self.width > 0
-        self.ns = set(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'])  # dont make generator or can only be called once
-        self.ns_width = set([''.join(comb) for comb in product(self.ns, repeat=self.width)])  # ditto
-        self.edge_count = len(self.ns_width) ** self.depth
-        if self.redis:
+        if self.redis:  # create emptydigest in redis and then do width/depth autodetection
             self.redis = redis.StrictRedis(host='127.0.0.1')
             app_name = type(self).__module__ + '.' + type(self).__name__
             self.rediskey = ':'.join([app_name, str(self.root), self.algorithm]) + '#'
@@ -170,6 +188,37 @@ class uHashFSBase():
                 self._commit_redis(digest=self.emptydigest, filepath=None)  # fix if decide to make emptyhash
             if self.verbose:
                 print("self.rediskey:", self.rediskey, file=sys.stderr)
+
+        if self.depth is 0 or self.width is 0:  # if either are 0, attempt autodetection
+            if hasattr(self, "uhashfs"):
+                self.width = self.uhashfs.width
+                self.depth = self.uhashfs.depth
+            else:
+                wdgen = WDgen(self.max_width, self.max_depth).go()
+                emptyhexdigest_path = None
+                while not emptyhexdigest_path:
+                    try:
+                        self.width, self.depth = next(wdgen)
+                    except StopIteration:
+                        print("Unable to autodetect width/depth. Specify --width and --depth to create a new root.", file=sys.stderr)
+                        quit(1)
+                    #print(self.width, self.depth)
+                    path = self.hexdigestpath(self.emptyhexdigest)
+                    if really_is_file(path):
+                        emptyhexdigest_path = path
+
+            #print(emptyhexdigest_path)
+        assert self.width > 0
+        assert self.depth > 0  # depth in theory could be zero, but then why use this?
+        assert self.width <= self.max_width
+        assert self.depth <= self.max_depth
+        if self.verbose:
+            print("self.width:", self.width, file=sys.stderr)
+            print("self.depth:", self.depth, file=sys.stderr)
+
+        self.ns = set(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'])  # dont make generator or can only be called once
+        self.ns_width = set([''.join(comb) for comb in product(self.ns, repeat=self.width)])  # ditto
+        self.edge_count = len(self.ns_width) ** self.depth
 
     def _commit_redis(self, digest, filepath):
         if filepath:
@@ -264,10 +313,6 @@ class uHashFSBase():
         object_count_estimate = self.edge_count * object_count_per_edge
         byte_count_estimate = self.edge_count * bytes_per_edge
         return (int(object_count_estimate), byte_count_estimate)
-
-    #def estimate_edge_folder_size(self, variance):
-    #    _, edge_size_estimate = estimate_object_count_and_total_size_per_edge(variance)
-    #    return
 
     def check(self, skip_cached=False, quiet=False):  # todo verify perms and attrs
         #import IPython

@@ -22,7 +22,7 @@ def testpath_fsroot(tmpdir):
 
 @pytest.fixture
 def fs_relative():
-    return uHashFS(root='relative_path' + TIMESTAMP)
+    return uHashFS(root='relative_path' + TIMESTAMP, algorithm='sha3_256', width=1, depth=4)
 
 
 @pytest.fixture
@@ -81,12 +81,12 @@ def filepath_fsroot(testfile_fsroot):
 
 @pytest.fixture
 def fs(testpath_fsroot):
-    return uHashFS(root=str(testpath_fsroot))
+    return uHashFS(root=str(testpath_fsroot), algorithm='sha3_256', width=1, depth=4)
 
 
 @pytest.fixture
 def fssha1(testpath_fsroot):
-    return uHashFS(root=str(testpath_fsroot), algorithm='sha1')
+    return uHashFS(root=str(testpath_fsroot), algorithm='sha1', width=1, depth=4)
 
 
 def putstr_range(fs, count):
