@@ -164,9 +164,10 @@ def check(obj, delete_empty, dont_skip_cached, quiet, verbose):
     if not skip_cached:
         print("Warning: not skipping hashes already cached in redis.", file=sys.stderr)
     for path, expected_hash in obj.check(skip_cached=skip_cached, quiet=quiet):
-        print(path)
-        if expected_hash.fs.emptyhexdigest:
+        print("bad:", path)
+        if expected_hash.hexdigest == expected_hash.fs.emptyhexdigest:
             print("path:", path, "matches the emptydigest for", expected_hash.fs.algorithm, file=sys.stderr)
+            assert os.stat(path).st_size == 0
             if delete_empty:
                 os.unlink(path)
                 print("deleted:", path, file=sys.stderr)
