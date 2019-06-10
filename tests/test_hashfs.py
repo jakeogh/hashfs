@@ -384,11 +384,11 @@ def test_uhashfs_corrupted(fs, unicodestring):
     #import IPython
     #IPython.embed()
 
-    assert len(list(fs.check())) == 0  # todo write file back with incorrect perms
+    assert len(list(fs.check(path=fs.root))) == 0  # todo write file back with incorrect perms
 
     with open(address.abspath, 'ab') as fh:
         fh.write(b'f')
-    assert len(list(fs.check())) == 1
+    assert len(list(fs.check(path=fs.root))) == 1
 
 
 def test_uhashfs_correct_file_count(fs):
