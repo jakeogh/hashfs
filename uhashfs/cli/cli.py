@@ -118,7 +118,7 @@ def iterate(obj):
 
 
 @cli.command()
-@click.option("--variance", type=click.FloatRange(0, 100), default=0.01)  # 100 is arb
+@click.option("--variance", type=click.FloatRange(0, 100), default=0.001)  # 100 is arb
 @click.option('--verbose', is_flag=True)
 @click.pass_obj
 def estimate_edge_properites(obj, variance, verbose):
@@ -129,7 +129,7 @@ def estimate_edge_properites(obj, variance, verbose):
 
 
 @cli.command()
-@click.option("--variance", type=click.FloatRange(0, 100), default=0.01)  # 100 is arb
+@click.option("--variance", type=click.FloatRange(0, 100), default=0.001)  # 100 is arb
 @click.option('--verbose', is_flag=True)
 @click.pass_obj
 def estimate_tree_properites(obj, variance, verbose):

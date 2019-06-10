@@ -80,6 +80,11 @@ def filepath_fsroot(testfile_fsroot):
 
 
 @pytest.fixture
+def fs_default_algorithm(testpath_fsroot):
+    return uHashFS(root=str(testpath_fsroot), width=1, depth=4)
+
+
+@pytest.fixture
 def fs(testpath_fsroot):
     return uHashFS(root=str(testpath_fsroot), algorithm='sha3_256', width=1, depth=4)
 
@@ -152,6 +157,14 @@ def test_uhashfs_putstr(fs):
     with open(address.abspath, 'rb') as fileobj:
         assert fileobj.read() == bytes('foo', 'UTF8')
     assert len(list(fs.files())) == 1
+
+
+def test_uhashfs_putstr_default_alg(fs_default_algorithm):
+    address = fs_default_algorithm.putstr('foo')
+    assert_file_put(fs_default_algorithm, address)
+    with open(address.abspath, 'rb') as fileobj:
+        assert fileobj.read() == bytes('foo', 'UTF8')
+    assert len(list(fs_default_algorithm.files())) == 1
 
 
 def test_uhashfs_putstr_bytes(fs):

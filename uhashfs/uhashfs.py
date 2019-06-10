@@ -19,6 +19,7 @@ from kcl.symlinkops import create_relative_symlink
 
 #import IPython
 #IPython.embed()
+# todo fix alg duplicates
 
 
 def really_is_file(path):
@@ -158,7 +159,8 @@ class uHashFSBase():
     width: int = 0  # autodetect
     max_width: int = 3  # limit autodetection search space
     max_depth: int = 6  # limit autodetection search space
-    algorithm: str = 'sha3_256'
+    default_algorithm: str = 'sha3_256'
+    algorithm: str = ''
     fmode: int = 0o444
     dmode: int = 0o755
     verbose: bool = False
@@ -166,15 +168,55 @@ class uHashFSBase():
     legacy: bool = False
 
     def __attrs_post_init__(self):
+        self.tmp = "_tmp"
         self.root = self.root.resolve()
         if self.verbose:
             print("self.root:", self.root, file=sys.stderr)
-        self.tmp = "_tmp"  # needed only by uHashFS but required here to make sure it does not collide
-        assert self.algorithm != self.tmp
+        try:
+            root_item_count = len(os.listdir(self.root))
+        except FileNotFoundError:
+            # thats fine, it has not been written to yet
+            root_item_count = 0
+        if not self.algorithm:
+            if hasattr(self, "uhashfs"):
+                self.algorithm = self.uhashfs.algorithm
+
+            if self.legacy:
+                print("Specify --algorithm to use --legacy", file=sys.stderr)
+                quit(1)  # todo
+
+            if root_item_count == 0:
+                if self.depth is 0 or self.width is 0:  # a new root can be created if these are specified, default_algoritm will be used
+                    print(self.root, "is empty. Specify --algorithm --width and --depth to create a new root.", file=sys.stderr)
+                    quit(1)  # todo: should be raising something
+            elif root_item_count == 2:
+                if not really_is_dir(self.root / Path(self.tmp)):
+                    print(self.root, "has 2 items in it, and one is not", self.tmp, "Specify --algorithm --width and --depth to create a new root in a empty folder.", file=sys.stder)
+                    quit(1)  # todo
+                else:
+                    for alg in list(hashlib.algorithms_available):
+                        if really_is_dir(self.root / Path(alg)):
+                            self.algorithm = alg
+                            break
+                    if not self.algorithm:
+                        print("self.root:", self.root, "does not contain a hash folder. Specify --algorithm --width and --depth to create a new root in a empty folder", file=sys.stderr)
+                        quit(1)  # todo
+
+        if not self.legacy:
+            if root_item_count > 2:
+                print(self.root, "has more than 2 items in it. Specify --algorithm --width and --depth to create a new root in a empty folder.", file=sys.stderr)
+                quit(1)  # todo
+
+        if not self.algorithm:
+            self.algorithm = self.default_algorithm
+
+        if self.verbose:
+            print("self.algorithm:", self.algorithm, file=sys.stderr)
+
         self.digestlen = hashlib.new(self.algorithm).digest_size
         self.hexdigestlen = self.digestlen * 2
         self.emptydigest = getattr(hashlib, self.algorithm)(b'').digest()
-        # this record is created when _tmp is created
+        # this record is created when _tmp is created (todo!)
         # its used to autodetect the width and depth if a tree
         # it also makes autodetection of the algorithm possible
         self.emptyhexdigest = self.emptydigest.hex()
