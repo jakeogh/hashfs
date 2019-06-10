@@ -155,8 +155,11 @@ def ipython(obj):
 @click.option('--delete-empty', is_flag=True)
 @click.option('--dont-skip-cached', is_flag=True)
 @click.option('--quiet', is_flag=True)
+@click.option('--verbose', is_flag=True)
 @click.pass_obj
 def check(obj, delete_empty, dont_skip_cached, quiet):
+    if verbose:
+        obj.verbose = True
     skip_cached = not dont_skip_cached
     if not skip_cached:
         print("Warning: not skipping hashes already cached in redis.", file=sys.stderr)
