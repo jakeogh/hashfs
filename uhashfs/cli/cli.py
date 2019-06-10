@@ -152,18 +152,24 @@ def ipython(obj):
 
 
 @cli.command()
+@click.option('--alt-root', is_flag=False, type=str)
 @click.option('--delete-empty', is_flag=True)
 @click.option('--dont-skip-cached', is_flag=True)
 @click.option('--quiet', is_flag=True)
 @click.option('--verbose', is_flag=True)
 @click.pass_obj
-def check(obj, delete_empty, dont_skip_cached, quiet, verbose):
+def check(obj, alt_root, delete_empty, dont_skip_cached, quiet, verbose):
     if verbose:
         obj.verbose = True
+    if alt_root:
+        path = Path(alt_root)
+    else:
+        path = obj.root
+
     skip_cached = not dont_skip_cached
     if not skip_cached:
         print("Warning: not skipping hashes already cached in redis.", file=sys.stderr)
-    for path, expected_hash in obj.check(skip_cached=skip_cached, quiet=quiet):
+    for path, expected_hash in obj.check(path=path, skip_cached=skip_cached, quiet=quiet):
         print("bad:", path)
         if expected_hash.hexdigest == expected_hash.fs.emptyhexdigest:
             print("path:", path, "matches the emptydigest for", expected_hash.fs.algorithm, file=sys.stderr)

@@ -356,13 +356,14 @@ class uHashFSBase():
         byte_count_estimate = self.edge_count * bytes_per_edge
         return (int(object_count_estimate), byte_count_estimate)
 
-    def check(self, skip_cached=False, quiet=False, debug=False):  # todo verify perms and attrs
+    def check(self, path, skip_cached=False, quiet=False, debug=False):  # todo verify perms and attrs
         #import IPython
         #IPython.embed()
         # todo find broken latest_archive symlinks
         # todo find empty metadata folders, or with 1 broken latest_archive symlink
+        assert path_is_parent(self.root, path)
         longest_path = 0
-        for path in self.paths(path=self.root, return_symlinks=False, return_dirs=True):
+        for path in self.paths(path=path, return_symlinks=False, return_dirs=True):
             pathlen = len(path.absolute().as_posix())
             longest_path = max(longest_path, pathlen)
             pad = longest_path - pathlen
@@ -376,9 +377,11 @@ class uHashFSBase():
                 eprint("path:", path)
                 eprint("rel_root:", rel_root)
             if not self.legacy:
-                assert rel_root.parts[0] in (self.algorithm, '_tmp')
+                assert rel_root.parts[0] in (self.algorithm, self.tmp)
             if really_is_file(path):
                 if hasattr(self, "tmproot"):
+                    if path.parts[-2] == self.tmp:
+                        continue
                     if self.redis and skip_cached:
                         if self.redis.zscore(self.rediskey, binascii.unhexlify(path.name)):
                             if self.verbose:
