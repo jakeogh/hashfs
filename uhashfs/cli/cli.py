@@ -157,7 +157,7 @@ def ipython(obj):
 @click.option('--quiet', is_flag=True)
 @click.option('--verbose', is_flag=True)
 @click.pass_obj
-def check(obj, delete_empty, dont_skip_cached, quiet):
+def check(obj, delete_empty, dont_skip_cached, quiet, verbose):
     if verbose:
         obj.verbose = True
     skip_cached = not dont_skip_cached
