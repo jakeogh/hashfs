@@ -26,7 +26,7 @@ ALGS.sort()
 @click.option('--algorithm', type=click.Choice(ALGS), required=True)
 @click.option('--fmode', type=int)
 @click.option('--dmode', type=int)
-@click.option('--redis', is_flag=True)
+@click.option('--disable-redis', is_flag=True)
 @click.option('--verbose', is_flag=True)
 @click.option('--legacy', is_flag=True)
 @click.pass_context
@@ -35,7 +35,10 @@ def cli(ctx, **kwargs):
     meta_settings = {}
     for name, value in kwargs.items():
         #print(name, value)
-        if value:
+        if name == 'disable_redis':
+            if not value:  # enable it
+                settings['redis'] = True
+        elif value:
             if name == "metaroot":
                 meta_settings[name] = value
             else:

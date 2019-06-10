@@ -359,6 +359,8 @@ class uHashFSBase():
     def check(self, skip_cached=False, quiet=False):  # todo verify perms and attrs
         #import IPython
         #IPython.embed()
+        # todo find broken latest_archive symlinks
+        # todo find empty metadata folders, or with 1 broken latest_archive symlink
         longest_path = 0
         for path in self.paths(path=self.root, return_symlinks=False, return_dirs=True):
             pathlen = len(path.absolute().as_posix())
