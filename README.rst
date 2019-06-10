@@ -4,13 +4,14 @@ uhashfs
 
 uhashfs is based on HashFs: https://github.com/dgilland/hashfs
 
-uhashfs is a content-addressable file management, it manages a directory tree where files are saved based on their hash.
+uhashfs is a content-addressable file storage and retrieval system, it manages a directory tree where files are saved based on their hash.
 
 Typical use cases for this kind of system are ones where:
 
+- Low memory footprint, no dameon necessary.
 - Files are written once and never change (e.g. image storage).
 - It's desirable to have no duplicate files (e.g. user uploads).
-- File metadata is stored elsewhere (e.g. in a database).
+- File metadata is stored elsewhere (e.g. in a database or the optonal uHashFSMetadata class).
 
 
 Features
@@ -59,7 +60,7 @@ on the same filesystem as the root folder.
 
     # Set the `depth` to the number of subfolders the file's hash should be split when saving.
     # Set the `width` to the desired width of each subfolder.
-    fs = uHashFS(root='temp_hashfs', depth=4, width=1, algorithm='sha256')
+    fs = uHashFS(root='temp_hashfs', depth=4, width=1, algorithm='sha3_256')
 
     # With depth=4 and width=1, files will be saved in the following pattern:
     # temp_hashfs/a/b/c/d/abcdefghijklmnopqrstuvwxyz

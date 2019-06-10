@@ -124,13 +124,13 @@ def path_is_parent(parent, child):
     return os.path.commonpath([parent]) == os.path.commonpath([parent, child])
 
 
-def get_mtime(infile):
+def get_amtime(infile):
     try:
         infile_stat = os.stat(infile)
     except TypeError:
         infile_stat = os.stat(infile.fileno())
-    mtime = (infile_stat.st_atime_ns, infile_stat.st_mtime_ns)
-    return mtime
+    amtime = (infile_stat.st_atime_ns, infile_stat.st_mtime_ns)
+    return amtime
 
 
 @attr.s(auto_attribs=True, kw_only=True)
@@ -173,7 +173,7 @@ class uHashFSBase():
 
     def _commit_redis(self, digest, filepath):
         if filepath:
-            mtime = get_mtime(filepath)
+            _, mtime = get_amtime(filepath)  # backwards
         else:
             assert digest == self.emptydigest
             mtime = str(time.time())
@@ -487,7 +487,7 @@ class uHashFS(uHashFSBase):
 
     def putfile(self, infile, preserve_mtime=True):
         if preserve_mtime:
-            mtime = get_mtime(infile)
+            mtime = get_amtime(infile)
         else:
             mtime = False
 
