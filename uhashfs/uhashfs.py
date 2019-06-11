@@ -366,7 +366,7 @@ class uHashFSBase():
         for path in self.paths(path=path, return_symlinks=False, return_dirs=True):
             pathlen = len(path.absolute().as_posix())
             longest_path = max(longest_path, pathlen)
-            pad = longest_path - pathlen
+            pad = (longest_path - pathlen) + 4  # +4 to cover arrow presses like right arrow "^[[C"
             pad = pad * ' ' + '\r'
             if not self.verbose:
                 if not quiet:
