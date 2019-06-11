@@ -364,81 +364,85 @@ class uHashFSBase():
         assert path_is_parent(self.root, path)
         longest_path = 0
         for path in self.paths(path=path, return_symlinks=False, return_dirs=True):
-            pathlen = len(path.absolute().as_posix())
-            longest_path = max(longest_path, pathlen)
-            pad = (longest_path - pathlen) + 4  # +4 to cover arrow presses like right arrow "^[[C"
-            pad = pad * ' ' + '\r'
-            if not self.verbose:
-                if not quiet:
-                    print(path, end=pad, file=sys.stderr, flush=True)
-            assert path_is_parent(self.root, path)
-            rel_root = path.relative_to(self.root)
-            if debug:
-                eprint("path:", path)
-                eprint("rel_root:", rel_root)
-            if not self.legacy:
-                assert rel_root.parts[0] in (self.algorithm, self.tmp)
-            if really_is_file(path):
-                if hasattr(self, "tmproot"):
-                    if path.parts[-2] == self.tmp:
-                        continue
-                    if self.redis and skip_cached:
-                        if self.redis.zscore(self.rediskey, binascii.unhexlify(path.name)):
-                            if self.verbose:
-                                print(path, "(redis)")
-                            continue
-
-                    digest = hash_file(path, self.algorithm, tmp=None)
-                    hexdigest = digest.hex()
-                    if self.verbose:
-                        print(path, "(hashed)")
-                    try:
-                        assert len(hexdigest) == len(path.name)
-                    except AssertionError as e:
-                        eprint("path:", path)
-                        raise e
-                    expected_path = self.hexdigestpath(hexdigest)
-                    if expected_path != path:
-                        yield (path, HashAddress(digest, self, expected_path))
-                    else:
-                        if self.redis:
-                            self._commit_redis(digest, filepath=path)
-                else:
-                    assert path.lstat().st_size == 0
-            elif really_is_dir(path):
-                try:
+            try:
+                pathlen = len(path.absolute().as_posix())
+                longest_path = max(longest_path, pathlen)
+                pad = (longest_path - pathlen) + 4  # +4 to cover arrow presses like right arrow "^[[C"
+                pad = pad * ' ' + '\r'
+                if not self.verbose:
+                    if not quiet:
+                        print(path, end=pad, file=sys.stderr, flush=True)
+                assert path_is_parent(self.root, path)
+                rel_root = path.relative_to(self.root)
+                if debug:
+                    eprint("path:", path)
+                    eprint("rel_root:", rel_root)
+                if not self.legacy:
+                    assert rel_root.parts[0] in (self.algorithm, self.tmp)
+                if really_is_file(path):
                     if hasattr(self, "tmproot"):
-                        assert (len(rel_root.parts) - 1) <= self.depth
-                    if rel_root == Path(self.tmp):
-                        continue
-                    if self.legacy:
-                        tree_path = rel_root
-                    else:
-                        tree_path = rel_root.relative_to(self.algorithm)
-                    if tree_path.name:
-                        if len(tree_path.parts) <= self.depth:
-                            assert len(tree_path.name) == self.width
-                            assert tree_path.name in self.ns  # bug for angryfiles to find
-                        elif len(tree_path.parts) == self.depth + 1:
-                            assert len(tree_path.name) == self.hexdigestlen
-                            try:
-                                assert tree_path.parts[0:-1] == self.shard(tree_path.name)
-                            except AssertionError as e:
-                                print(e)
-                                import IPython
-                                IPython.embed()
-                                #raise e
-                        elif len(tree_path.parts) == self.depth + 2:
-                            assert tree_path.name in ('archive', 'tags', 'strings')
-                        elif len(tree_path.parts) == self.depth + 3:
-                            assert float(tree_path.name)
-                        elif len(tree_path.parts) == self.depth + 4:
-                            assert tree_path.name in ('021_requests.plugin')
+                        if path.parts[-2] == self.tmp:
+                            continue
+                        if self.redis and skip_cached:
+                            if self.redis.zscore(self.rediskey, binascii.unhexlify(path.name)):
+                                if self.verbose:
+                                    print(path, "(redis)")
+                                continue
+
+                        digest = hash_file(path, self.algorithm, tmp=None)
+                        hexdigest = digest.hex()
+                        if self.verbose:
+                            print(path, "(hashed)")
+                        try:
+                            assert len(hexdigest) == len(path.name)
+                        except AssertionError as e:
+                            eprint("path:", path)
+                            raise e
+                        expected_path = self.hexdigestpath(hexdigest)
+                        if expected_path != path:
+                            yield (path, HashAddress(digest, self, expected_path))
                         else:
-                            assert False
-                except AssertionError as e:
-                    print("\n", path)
-                    raise e
+                            if self.redis:
+                                self._commit_redis(digest, filepath=path)
+                    else:
+                        assert path.lstat().st_size == 0
+                elif really_is_dir(path):
+                    try:
+                        if hasattr(self, "tmproot"):
+                            assert (len(rel_root.parts) - 1) <= self.depth
+                        if rel_root == Path(self.tmp):
+                            continue
+                        if self.legacy:
+                            tree_path = rel_root
+                        else:
+                            tree_path = rel_root.relative_to(self.algorithm)
+                        if tree_path.name:
+                            if len(tree_path.parts) <= self.depth:
+                                assert len(tree_path.name) == self.width
+                                assert tree_path.name in self.ns  # bug for angryfiles to find
+                            elif len(tree_path.parts) == self.depth + 1:
+                                assert len(tree_path.name) == self.hexdigestlen
+                                try:
+                                    assert tree_path.parts[0:-1] == self.shard(tree_path.name)
+                                except AssertionError as e:
+                                    print(e)
+                                    import IPython
+                                    IPython.embed()
+                                    #raise e
+                            elif len(tree_path.parts) == self.depth + 2:
+                                assert tree_path.name in ('archive', 'tags', 'strings')
+                            elif len(tree_path.parts) == self.depth + 3:
+                                assert float(tree_path.name)
+                            elif len(tree_path.parts) == self.depth + 4:
+                                assert tree_path.name in ('021_requests.plugin')
+                            else:
+                                assert False
+                    except AssertionError as e:
+                        print("\n", path)
+                        raise e
+            except Exception as e:  # bare exception to catch every case and always print the offending file
+                print("Exception on path:", path)
+                raise e
 
 
 @attr.s(auto_attribs=True, kw_only=True)

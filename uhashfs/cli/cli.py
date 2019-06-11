@@ -176,8 +176,9 @@ def check(obj, alt_root, delete_empty, dont_skip_cached, quiet, verbose):
             assert not path_size
             if delete_empty:
                 os.unlink(path)
-                print("(rm)", file=sys.stderr)
-        print(file=sys.stderr)
+                print(" (rm)")
+        else:
+            print()
 
 
 if __name__ == '__main__':
